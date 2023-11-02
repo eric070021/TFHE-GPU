@@ -1,0 +1,21 @@
+{
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "build debug project",
+            "command": "make",
+            "args": [
+                "build_debug",
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "build project(debug)."
+        },
+    ],
+    "version": "2.0.0"
+}
