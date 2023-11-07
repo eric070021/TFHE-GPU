@@ -71,6 +71,17 @@
         "__config": "cpp",
         "span": "cpp",
         "__nullptr": "cpp",
-        "filesystem": "cpp"
-    }
+        "filesystem": "cpp",
+        "codecvt": "cpp",
+        "compare": "cpp",
+        "concepts": "cpp",
+        "forward_list": "cpp",
+        "future": "cpp",
+        "numbers": "cpp",
+        "semaphore": "cpp",
+        "stop_token": "cpp",
+        "valarray": "cpp",
+        "variant": "cpp"
+    },
+    "cmake.configureOnOpen": false
 }

@@ -11,22 +11,6 @@
 typedef cuDoubleComplex Complex_d;
 
 namespace lbcrypto {
-
-using FFT_1024     = decltype(cufftdx::Block() + cufftdx::Size<1024>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() + cufftdx::ElementsPerThread<8>() +
-                        cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<1>() + cufftdx::SM<890>());
-
-using IFFT_1024     = decltype(cufftdx::Block() + cufftdx::Size<1024>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() + cufftdx::ElementsPerThread<8>() +
-                        cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<1>() + cufftdx::SM<890>());
-
-using FFT_512      = decltype(cufftdx::Block() + cufftdx::Size<512>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() +
-                        cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<1>() + cufftdx::SM<890>());
-
-using IFFT_512     = decltype(cufftdx::Block() + cufftdx::Size<512>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() +
-                        cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<1>() + cufftdx::SM<890>());
-
-using FFT = FFT_1024; // Default value for FFT
-using IFFT = IFFT_1024; // Default value for IFFT
-
 // global memory
 __device__ Complex_d* GINX_bootstrappingKey_CUDA;
 __device__ Complex_d* monomial_CUDA;
@@ -34,6 +18,12 @@ __device__ Complex_d* twiddleTable_CUDA;
 __device__ Complex_d* ct_CUDA;
 __device__ Complex_d* dct_CUDA;
 __device__ uint64_t* params_CUDA;
+
+// Create CUDA streams for parallel bootstrapping
+// cudaStream_t streams[bootstrap_num];
+// for (int s = 0; s < bootstrap_num; s++) {
+//     cudaStreamCreate(&streams[s]);
+// }
 
 template<class FFT, class IFFT>
 __global__ void bootstrapping_CUDA(Complex_d* acc_CUDA, Complex_d* ct, Complex_d* dct, uint64_t* a_CUDA, Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, uint64_t* params_CUDA, Complex_d* GINX_bootstrappingKey_CUDA);
@@ -76,7 +66,13 @@ struct GPUInfo {
 
 void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> GINX_bootstrappingKey_FFT,const std::shared_ptr<RingGSWCryptoParams> params);
 
+template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
+void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> GINX_bootstrappingKey_FFT,const std::shared_ptr<RingGSWCryptoParams> params);
+
 void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d);
+
+template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
+void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d);
 
 };  // namespace lbcrypto
 

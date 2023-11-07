@@ -77,25 +77,25 @@ int main() {
     cc.Decrypt(sk, ctAND, &result);
     std::cout << "1 AND 1 = " << result << std::endl;
 
-    // auto ctNAND = cc.EvalBinGate(NAND, ct1, ct2);
-    // cc.Decrypt(sk, ctNAND, &result);
-    // std::cout << "1 NAND 1 = " << result << std::endl;
+    auto ctNAND = cc.EvalBinGate(NAND, ct1, ct2);
+    cc.Decrypt(sk, ctNAND, &result);
+    std::cout << "1 NAND 1 = " << result << std::endl;
 
-    // auto ctOR = cc.EvalBinGate(OR, ct1, ct2);
-    // cc.Decrypt(sk, ctOR, &result);
-    // std::cout << "1 OR 1 = " << result << std::endl;
+    auto ctOR = cc.EvalBinGate(OR, ct1, ct2);
+    cc.Decrypt(sk, ctOR, &result);
+    std::cout << "1 OR 1 = " << result << std::endl;
 
-    // auto ctNOR = cc.EvalBinGate(NOR, ct1, ct2);
-    // cc.Decrypt(sk, ctNOR, &result);
-    // std::cout << "1 NOR 1 = " << result << std::endl;
+    auto ctNOR = cc.EvalBinGate(NOR, ct1, ct2);
+    cc.Decrypt(sk, ctNOR, &result);
+    std::cout << "1 NOR 1 = " << result << std::endl;
 
-    // auto ctXOR = cc.EvalBinGate(XOR, ct1, ct2);
-    // cc.Decrypt(sk, ctXOR, &result);
-    // std::cout << "1 XOR 1 = " << result << std::endl;
+    auto ctXOR = cc.EvalBinGate(XOR, ct1, ct2);
+    cc.Decrypt(sk, ctXOR, &result);
+    std::cout << "1 XOR 1 = " << result << std::endl;
 
-    // auto ctXNOR = cc.EvalBinGate(XNOR, ct1, ct2);
-    // cc.Decrypt(sk, ctXNOR, &result);
-    // std::cout << "1 XNOR 1 = " << result << std::endl;
+    auto ctXNOR = cc.EvalBinGate(XNOR, ct1, ct2);
+    cc.Decrypt(sk, ctXNOR, &result);
+    std::cout << "1 XNOR 1 = " << result << std::endl;
 
     auto end = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
