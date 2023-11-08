@@ -3,10 +3,14 @@
 
 #ifdef __CUDACC__
 
+#include <vector>
 #include <cuComplex.h>
 #include <cuda_runtime.h>
+#include <cooperative_groups.h>
 #include "cufftdx.hpp"
 #include "utils_gpu.cuh"
+
+namespace cg = cooperative_groups;
 
 typedef cuDoubleComplex Complex_d;
 
@@ -20,13 +24,13 @@ __device__ Complex_d* dct_CUDA;
 __device__ uint64_t* params_CUDA;
 
 // Create CUDA streams for parallel bootstrapping
-// cudaStream_t streams[bootstrap_num];
-// for (int s = 0; s < bootstrap_num; s++) {
-//     cudaStreamCreate(&streams[s]);
-// }
+std::vector<cudaStream_t> streams;
 
 template<class FFT, class IFFT>
-__global__ void bootstrapping_CUDA(Complex_d* acc_CUDA, Complex_d* ct, Complex_d* dct, uint64_t* a_CUDA, Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, uint64_t* params_CUDA, Complex_d* GINX_bootstrappingKey_CUDA);
+__global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, uint64_t* params_CUDA, Complex_d* GINX_bootstrappingKey_CUDA);
+
+template<class FFT, class IFFT>
+__global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, uint64_t* params_CUDA, Complex_d* GINX_bootstrappingKey_CUDA);
 
 template<class FFT>
 __global__ void cuFFTDxFWD(Complex_d* data, Complex_d* twiddleTable_CUDA);

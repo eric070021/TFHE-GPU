@@ -19,7 +19,328 @@ std::vector<GPUInfo> gpuInfoList;
 
 template<class FFT, class IFFT>
 __launch_bounds__(FFT::max_threads_per_block)
-__global__ void bootstrapping_CUDA(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
+__global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
+        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, uint64_t* params_CUDA, Complex_d* GINX_bootstrappingKey_CUDA){
+
+    cg::grid_group grid = cg::this_grid();
+    uint32_t tid = ThisThreadRankInBlock(); // thread id in block
+    uint32_t bid = grid.block_rank(); // block id in grid
+    uint32_t gtid = grid.thread_rank(); // global thread id
+    uint32_t bdim = ThisBlockSize(); // size of block
+    uint32_t gdim = grid.num_threads(); // number of threads in grid
+
+    uint64_t M            = params_CUDA[0] << 1;
+    uint64_t N            = params_CUDA[0];
+    uint64_t NHalf        = N >> 1;
+    uint64_t n            = params_CUDA[1];
+    uint64_t Q            = params_CUDA[2];
+    uint64_t QHalf        = params_CUDA[2] >> 1;
+    uint64_t digitsG2     = params_CUDA[3];
+    uint64_t baseG        = params_CUDA[4];
+    int32_t gBits = static_cast<int32_t>(log2(static_cast<double>(baseG)));
+    int32_t gBitsMaxBits = 64 - gBits;
+    uint32_t RGSW_size = digitsG2 * 2 * NHalf;
+
+    /* cufftdx variables */
+    using complex_type = typename FFT::value_type;
+    const unsigned int local_fft_id = threadIdx.y;
+    const unsigned int offset = cufftdx::size_of<FFT>::value * (blockIdx.x * FFT::ffts_per_block + local_fft_id);
+    extern __shared__ complex_type shared_mem[];
+    complex_type thread_data[FFT::storage_size];     
+    
+    /* 2 times Forward FFT */
+    if(bid == 0){
+        // Load data from shared memory to registers
+        {
+            unsigned int index = offset + threadIdx.x;
+            unsigned int twist_idx = threadIdx.x;
+            for (unsigned i = 0; i < FFT::elements_per_thread; i++) {
+                // twisting
+                acc_CUDA[index] = cuCmul(acc_CUDA[index], twiddleTable_CUDA[twist_idx]);
+                thread_data[i] = complex_type {acc_CUDA[index].x, acc_CUDA[index].y};
+                // FFT::stride shows how elements from a single FFT should be split between threads
+                index += FFT::stride;
+                twist_idx += FFT::stride;
+            }
+        }
+
+        FFT().execute(thread_data, shared_mem);
+
+        // Save results
+        {
+            unsigned int index = offset + threadIdx.x;
+            for (unsigned i = 0; i < FFT::elements_per_thread; i++) {
+                acc_CUDA[index] = make_cuDoubleComplex(thread_data[i].x, thread_data[i].y);
+                // FFT::stride shows how elements from a single FFT should be split between threads
+                index += FFT::stride;
+            }
+        }
+    }
+    grid.sync();
+    
+    for(uint32_t round = 0; round < n; ++round){
+        /* Copy acc_CUDA to ct_CUDA */
+        for(uint32_t i = gtid; i < N; i += gdim){
+            ct_CUDA[i] = acc_CUDA[i];
+        }
+        grid.sync();
+
+        /* 2 times Inverse IFFT */
+        if(bid == 0){
+            // Load data from shared memory to registers
+            {
+                unsigned int index = offset + threadIdx.x;
+                for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
+                    thread_data[i] = complex_type {ct_CUDA[index].x, ct_CUDA[index].y};
+                    // FFT::stride shows how elements from a single FFT should be split between threads
+                    index += IFFT::stride;
+                }
+            }
+
+            // Scale values
+            double scale = 1.0 / cufftdx::size_of<IFFT>::value;
+            for (unsigned int i = 0; i < IFFT::elements_per_thread; i++) {
+                thread_data[i].x *= scale;
+                thread_data[i].y *= scale;
+            }
+
+            IFFT().execute(thread_data, shared_mem);
+        
+            // Save results
+            {
+                unsigned int index = offset + threadIdx.x;
+                unsigned int twist_idx = threadIdx.x;
+                for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
+                    ct_CUDA[index].x = thread_data[i].x;
+                    ct_CUDA[index].y = thread_data[i].y;
+                    // twisting
+                    ct_CUDA[index] = cuCmul(ct_CUDA[index], twiddleTable_CUDA[twist_idx + NHalf]);
+                    // Round to INT128 and MOD
+                    ct_CUDA[index].x = static_cast<double>(static_cast<__int128_t>(rint(ct_CUDA[index].x)) % static_cast<__int128_t>(Q));
+                    if (ct_CUDA[index].x < 0)
+                        ct_CUDA[index].x += static_cast<double>(Q);
+                    if (ct_CUDA[index].x >= QHalf)
+                        ct_CUDA[index].x -= static_cast<double>(Q);
+                    ct_CUDA[index].y = static_cast<double>(static_cast<__int128_t>(rint(ct_CUDA[index].y)) % static_cast<__int128_t>(Q));
+                    if (ct_CUDA[index].y < 0)
+                        ct_CUDA[index].y += static_cast<double>(Q);
+                    if (ct_CUDA[index].y >= QHalf)
+                        ct_CUDA[index].y -= static_cast<double>(Q);
+                    // IFFT::stride shows how elements from a single FFT should be split between threads
+                    index += IFFT::stride;
+                    twist_idx += IFFT::stride;
+                }
+            }
+        }
+        grid.sync();
+
+        /* SignedDigitDecompose */
+        // polynomial from a
+        for (size_t k = gtid; k < NHalf; k += gdim) {
+            int64_t d0 = static_cast<int64_t>(ct_CUDA[k].x);
+            int64_t d1 = static_cast<int64_t>(ct_CUDA[k].y);
+
+            for (size_t l = 0; l < digitsG2; l += 2) {
+                int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
+                d0 = (d0 - r0) >> gBits;
+                if (r0 < 0)
+                    r0 += static_cast<int64_t>(Q);
+                if (r0 >= QHalf)
+                    r0 -= static_cast<int64_t>(Q);
+                dct_CUDA[l*NHalf + k].x = static_cast<double>(r0);
+
+                int64_t r1 = (d1 << gBitsMaxBits) >> gBitsMaxBits;
+                d1 = (d1 - r1) >> gBits;
+                if (r1 < 0)
+                    r1 += static_cast<int64_t>(Q);
+                if (r1 >= QHalf)
+                    r1 -= static_cast<int64_t>(Q);
+                dct_CUDA[l*NHalf + k].y = static_cast<double>(r1);
+            }
+        }
+
+        // polynomial from b
+        for (size_t k = gtid + NHalf; k < N; k += gdim) {
+            int64_t d0 = static_cast<int64_t>(ct_CUDA[k].x);
+            int64_t d1 = static_cast<int64_t>(ct_CUDA[k].y);
+
+            for (size_t l = 0; l < digitsG2; l += 2) {
+                int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
+                d0 = (d0 - r0) >> gBits;
+                if (r0 < 0)
+                    r0 += static_cast<int64_t>(Q);
+                if (r0 >= QHalf)
+                    r0 -= static_cast<int64_t>(Q);
+                dct_CUDA[l*NHalf + k].x = static_cast<double>(r0);
+
+                int64_t r1 = (d1 << gBitsMaxBits) >> gBitsMaxBits;
+                d1 = (d1 - r1) >> gBits;
+                if (r1 < 0)
+                    r1 += static_cast<int64_t>(Q);
+                if (r1 >= QHalf)
+                    r1 -= static_cast<int64_t>(Q);
+                dct_CUDA[l*NHalf + k].y = static_cast<double>(r1);
+            }
+        }
+        grid.sync();
+
+        /* digitsG2 times Forward FFT */
+        // Load data from shared memory to registers
+        {
+            unsigned int index = offset + threadIdx.x;
+            unsigned int twist_idx = threadIdx.x;
+            for (unsigned i = 0; i < FFT::elements_per_thread; i++) {
+                // twisting
+                dct_CUDA[index] = cuCmul(dct_CUDA[index], twiddleTable_CUDA[twist_idx]);
+                thread_data[i] = complex_type {dct_CUDA[index].x, dct_CUDA[index].y};
+                // FFT::stride shows how elements from a single FFT should be split between threads
+                index += FFT::stride;
+                twist_idx += FFT::stride;
+            }
+        }
+
+        FFT().execute(thread_data, shared_mem);
+
+        // Save results
+        {
+            unsigned int index = offset + threadIdx.x;
+            for (unsigned i = 0; i < FFT::elements_per_thread; i++) {
+                dct_CUDA[index] = make_cuDoubleComplex(thread_data[i].x, thread_data[i].y);
+                // FFT::stride shows how elements from a single FFT should be split between threads
+                index += FFT::stride;
+            }
+        }
+        grid.sync();
+
+        /* Obtain monomial */
+        // First obtain both monomial(index) for sk = 1 and monomial(-index) for sk = -1
+        auto aNeg         = (M - a_CUDA[round]) % M;
+        uint64_t indexPos = a_CUDA[round];
+        uint64_t indexNeg = aNeg;
+        // index is in range [0,m] - so we need to adjust the edge case when
+        // index = m to index = 0
+        if (indexPos == M)
+            indexPos = 0;
+        if (indexNeg == M)
+            indexNeg = 0;
+        
+        /* ACC times Bootstrapping key and monomial */
+        /* multiply with ek0 */
+        // polynomial a
+        #pragma unroll
+        for (uint32_t i = gtid; i < NHalf; i += gdim){
+            ct_CUDA[i] = make_cuDoubleComplex(0, 0);
+            #pragma unroll
+            for (uint32_t l = 0; l < digitsG2; ++l){
+                ct_CUDA[i] = cuCadd(ct_CUDA[i], cuCmul(dct_CUDA[l*NHalf + i], GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i]));
+            }
+        }
+        // polynomial b
+        #pragma unroll
+        for (uint32_t i = gtid; i < NHalf; i += gdim){
+            ct_CUDA[NHalf + i] = make_cuDoubleComplex(0, 0);
+            #pragma unroll
+            for (uint32_t l = 0; l < digitsG2; ++l){
+                ct_CUDA[NHalf + i] = cuCadd(ct_CUDA[NHalf + i], cuCmul(dct_CUDA[l*NHalf + i], GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i]));
+            }
+        }
+        grid.sync();
+
+        /* multiply with postive monomial */
+        // polynomial a
+        #pragma unroll
+        for (uint32_t i = gtid; i < NHalf; i += gdim){
+            acc_CUDA[i] = cuCadd(acc_CUDA[i], cuCmul(ct_CUDA[i], monomial_CUDA[indexPos*NHalf + i]));
+        }
+        // polynomial b
+        #pragma unroll
+        for (uint32_t i = gtid; i < NHalf; i += gdim){
+            acc_CUDA[NHalf + i] = cuCadd(acc_CUDA[NHalf + i], cuCmul(ct_CUDA[NHalf + i], monomial_CUDA[indexPos*NHalf + i]));
+        }        
+        grid.sync();
+
+        /* multiply with ek1 */
+        // polynomial a
+        #pragma unroll
+        for (uint32_t i = gtid; i < NHalf; i += gdim){
+            ct_CUDA[i] = make_cuDoubleComplex(0, 0);
+            #pragma unroll
+            for (uint32_t l = 0; l < digitsG2; ++l)
+                ct_CUDA[i] = cuCadd(ct_CUDA[i], cuCmul(dct_CUDA[l*NHalf + i], GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i]));
+        }
+        // polynomial b
+        #pragma unroll
+        for (uint32_t i = gtid; i < NHalf; i += gdim){
+            ct_CUDA[NHalf + i] = make_cuDoubleComplex(0, 0);
+            #pragma unroll
+            for (uint32_t l = 0; l < digitsG2; ++l)
+                ct_CUDA[NHalf + i] = cuCadd(ct_CUDA[NHalf + i], cuCmul(dct_CUDA[l*NHalf + i], GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i]));
+        }
+        grid.sync();
+        
+        /* multiply with negative monomial */
+        // polynomial a
+        #pragma unroll
+        for (uint32_t i = gtid; i < NHalf; i += gdim){
+            acc_CUDA[i] = cuCadd(acc_CUDA[i], cuCmul(ct_CUDA[i], monomial_CUDA[indexNeg*NHalf + i]));
+        }
+        // polynomial b
+        #pragma unroll
+        for (uint32_t i = gtid; i < NHalf; i += gdim){
+            acc_CUDA[NHalf + i] = cuCadd(acc_CUDA[NHalf + i], cuCmul(ct_CUDA[NHalf + i], monomial_CUDA[indexNeg*NHalf + i]));
+        }        
+        grid.sync();
+    }
+
+    /* 2 times Inverse IFFT */
+    if(bid == 0){
+        // Load data from shared memory to registers
+        {
+            unsigned int index = offset + threadIdx.x;
+            for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
+                thread_data[i] = complex_type {acc_CUDA[index].x, acc_CUDA[index].y};
+                // FFT::stride shows how elements from a single FFT should be split between threads
+                index += IFFT::stride;
+            }
+        }
+
+        // Scale values
+        double scale = 1.0 / cufftdx::size_of<IFFT>::value;
+        for (unsigned int i = 0; i < IFFT::elements_per_thread; i++) {
+            thread_data[i].x *= scale;
+            thread_data[i].y *= scale;
+        }
+
+        IFFT().execute(thread_data, shared_mem);
+    
+        // Save results
+        {
+            unsigned int index = offset + threadIdx.x;
+            unsigned int twist_idx = threadIdx.x;
+            for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
+                acc_CUDA[index].x = thread_data[i].x;
+                acc_CUDA[index].y = thread_data[i].y;
+                // twisting
+                acc_CUDA[index] = cuCmul(acc_CUDA[index], twiddleTable_CUDA[twist_idx + NHalf]);
+                // Round to INT128 and MOD
+                acc_CUDA[index].x = static_cast<double>(static_cast<__int128_t>(rint(acc_CUDA[index].x)) % static_cast<__int128_t>(Q));
+                if (acc_CUDA[index].x < 0)
+                    acc_CUDA[index].x += static_cast<double>(Q);
+                acc_CUDA[index].y = static_cast<double>(static_cast<__int128_t>(rint(acc_CUDA[index].y)) % static_cast<__int128_t>(Q));
+                if (acc_CUDA[index].y < 0)
+                    acc_CUDA[index].y += static_cast<double>(Q);
+                // IFFT::stride shows how elements from a single FFT should be split between threads
+                index += IFFT::stride;
+                twist_idx += FFT::stride;
+            }
+        }
+    }
+    grid.sync();
+}
+
+template<class FFT, class IFFT>
+__launch_bounds__(FFT::max_threads_per_block)
+__global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
         Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, uint64_t* params_CUDA, Complex_d* GINX_bootstrappingKey_CUDA){
 
     uint32_t tid = ThisThreadRankInBlock();
@@ -861,11 +1182,22 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     uint32_t baseG = params->GetBaseG();
     uint32_t RGSW_size = digitsG2 * 2 * NHalf;
 
+    // /* Create cuda streams */
+    // for (int s = 0; s < gpuInfoList[0].multiprocessorCount; s++) {
+    //     cudaStreamCreate(&streams[s]);
+    // }
+
     /* Configure cuFFTDx */
     using FFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() + cufftdx::ElementsPerThread<8>() +
                         cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<FFT_num>() + cufftdx::SM<arch>());
 
     using IFFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() + cufftdx::ElementsPerThread<8>() +
+                            cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
+
+    using FFT_multi      = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() +
+                            cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
+
+    using IFFT_multi     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() +
                             cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
 
     using FFT_fwd  = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() + cufftdx::ElementsPerThread<8>() +
@@ -878,14 +1210,23 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
         exit(1);
     }
 
-    // Bootstrapping shared memory size
+    // Single block Bootstrapping shared memory size
     if(FFT::shared_memory_size > 65536)
-        cudaFuncSetAttribute(bootstrapping_CUDA<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 100);
+        cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 100);
     else if(FFT::shared_memory_size > 32768)
-        cudaFuncSetAttribute(bootstrapping_CUDA<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 64);
+        cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 64);
     else
-        cudaFuncSetAttribute(bootstrapping_CUDA<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 32);
-    cudaFuncSetAttribute(bootstrapping_CUDA<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size);
+        cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 32);
+    cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size);
+
+    // Multi block Bootstrapping shared memory size
+    if(FFT_multi::shared_memory_size > 65536)
+        cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 100);
+    else if(FFT_multi::shared_memory_size > 32768)
+        cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 64);
+    else
+        cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 32);
+    cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_multi::shared_memory_size);
 
     // cuFFTDx Forward shared memory size
     cudaFuncSetAttribute(cuFFTDxFWD<FFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 64);
@@ -1430,6 +1771,12 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     using IFFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() + cufftdx::ElementsPerThread<8>() +
                             cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
 
+    using FFT_multi      = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() +
+                            cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
+
+    using IFFT_multi     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() +
+                            cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
+
     /* Check whether block size exceeds cuda limitation */
     if((NHalf / FFT::elements_per_thread * digitsG2) > gpuInfoList[0].maxThreadsPerBlock){
         std::cerr << "Exceed Maximum blocks per threads (" << gpuInfoList[0].maxThreadsPerBlock << ")\n";
@@ -1462,10 +1809,16 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     cudaMemcpy(acc_CUDA, acc_d_arr, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice);
 
     /* Launch boostrapping kernel */
-    bootstrapping_CUDA<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size>>>
-        (acc_CUDA, ct_CUDA, dct_CUDA, a_CUDA, monomial_CUDA, twiddleTable_CUDA, params_CUDA, GINX_bootstrappingKey_CUDA);
+    void *kernelArgs[] = {(void *)&acc_CUDA, (void *)&ct_CUDA, (void *)&dct_CUDA, (void *)&a_CUDA, 
+        (void *)&monomial_CUDA, (void *)&twiddleTable_CUDA, (void *)&params_CUDA, (void *)&GINX_bootstrappingKey_CUDA};
+    cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT_multi, IFFT_multi>), digitsG2/2, FFT_multi::block_dim, kernelArgs, FFT_multi::shared_memory_size);
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    // /* Launch boostrapping kernel */
+    // bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size>>>
+    //     (acc_CUDA, ct_CUDA, dct_CUDA, a_CUDA, monomial_CUDA, twiddleTable_CUDA, params_CUDA, GINX_bootstrappingKey_CUDA);
+    // CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+    // CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
 
     /* Copy the acc_d_arr to acc_d */
     cudaMemcpy(acc_d_arr, acc_CUDA, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost);
