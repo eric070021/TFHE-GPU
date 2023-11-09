@@ -11,7 +11,8 @@
         }
 #endif // CUDA_CHECK_AND_EXIT
 
-#define sync_num 12
+#define sync_num 8
+#define bootstrap_num 10000
 
 namespace lbcrypto {
 
@@ -1182,10 +1183,11 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     uint32_t baseG = params->GetBaseG();
     uint32_t RGSW_size = digitsG2 * 2 * NHalf;
 
-    // /* Create cuda streams */
-    // for (int s = 0; s < gpuInfoList[0].multiprocessorCount; s++) {
-    //     cudaStreamCreate(&streams[s]);
-    // }
+    /* Create cuda streams */
+    streams.resize(gpuInfoList[0].multiprocessorCount);
+    for (int s = 0; s < gpuInfoList[0].multiprocessorCount; s++) {
+        cudaStreamCreate(&streams[s]);
+    }
 
     /* Configure cuFFTDx */
     using FFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() + cufftdx::ElementsPerThread<8>() +
@@ -1323,7 +1325,7 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     cudaMalloc(&dct_CUDA, digitsG2 * NHalf * sizeof(Complex_d));
 }
 
-void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d)
+void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d, std::string mode)
 {   
     /* Parameters Set */
     uint32_t N            = params->GetN();
@@ -1338,22 +1340,22 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
                 case 512:
                     switch (digitsG2){
                         case 2:
-                            AddToAccCGGI_CUDA_core<700, 512, 2>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 512, 2>(params, a, acc_d, mode);
                             break;
                         case 4:
-                            AddToAccCGGI_CUDA_core<700, 512, 4>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 512, 4>(params, a, acc_d, mode);
                             break;
                         case 6:
-                            AddToAccCGGI_CUDA_core<700, 512, 6>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 512, 6>(params, a, acc_d, mode);
                             break;
                         case 8:
-                            AddToAccCGGI_CUDA_core<700, 512, 8>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 512, 8>(params, a, acc_d, mode);
                             break;
                         case 10:
-                            AddToAccCGGI_CUDA_core<700, 512, 10>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 512, 10>(params, a, acc_d, mode);
                             break;
                         case 12:
-                            AddToAccCGGI_CUDA_core<700, 512, 12>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 512, 12>(params, a, acc_d, mode);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1363,22 +1365,22 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
                 case 1024:
                     switch (digitsG2){
                         case 2:
-                            AddToAccCGGI_CUDA_core<700, 1024, 2>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 1024, 2>(params, a, acc_d, mode);
                             break;
                         case 4:
-                            AddToAccCGGI_CUDA_core<700, 1024, 4>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 1024, 4>(params, a, acc_d, mode);
                             break;
                         case 6:
-                            AddToAccCGGI_CUDA_core<700, 1024, 6>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 1024, 6>(params, a, acc_d, mode);
                             break;
                         case 8:
-                            AddToAccCGGI_CUDA_core<700, 1024, 8>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 1024, 8>(params, a, acc_d, mode);
                             break;
                         case 10:
-                            AddToAccCGGI_CUDA_core<700, 1024, 10>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 1024, 10>(params, a, acc_d, mode);
                             break;
                         case 12:
-                            AddToAccCGGI_CUDA_core<700, 1024, 12>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 1024, 12>(params, a, acc_d, mode);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1388,22 +1390,22 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
                 case 2048:
                     switch (digitsG2){
                         case 2:
-                            AddToAccCGGI_CUDA_core<700, 2048, 2>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 2048, 2>(params, a, acc_d, mode);
                             break;
                         case 4:
-                            AddToAccCGGI_CUDA_core<700, 2048, 4>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 2048, 4>(params, a, acc_d, mode);
                             break;
                         case 6:
-                            AddToAccCGGI_CUDA_core<700, 2048, 6>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 2048, 6>(params, a, acc_d, mode);
                             break;
                         case 8:
-                            AddToAccCGGI_CUDA_core<700, 2048, 8>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 2048, 8>(params, a, acc_d, mode);
                             break;
                         case 10:
-                            AddToAccCGGI_CUDA_core<700, 2048, 10>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 2048, 10>(params, a, acc_d, mode);
                             break;
                         case 12:
-                            AddToAccCGGI_CUDA_core<700, 2048, 12>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<700, 2048, 12>(params, a, acc_d, mode);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1420,22 +1422,22 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
                 case 512:
                     switch (digitsG2){
                         case 2:
-                            AddToAccCGGI_CUDA_core<800, 512, 2>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 512, 2>(params, a, acc_d, mode);
                             break;
                         case 4:
-                            AddToAccCGGI_CUDA_core<800, 512, 4>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 512, 4>(params, a, acc_d, mode);
                             break;
                         case 6:
-                            AddToAccCGGI_CUDA_core<800, 512, 6>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 512, 6>(params, a, acc_d, mode);
                             break;
                         case 8:
-                            AddToAccCGGI_CUDA_core<800, 512, 8>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 512, 8>(params, a, acc_d, mode);
                             break;
                         case 10:
-                            AddToAccCGGI_CUDA_core<800, 512, 10>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 512, 10>(params, a, acc_d, mode);
                             break;
                         case 12:
-                            AddToAccCGGI_CUDA_core<800, 512, 12>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 512, 12>(params, a, acc_d, mode);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1445,22 +1447,22 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
                 case 1024:
                     switch (digitsG2){
                         case 2:
-                            AddToAccCGGI_CUDA_core<800, 1024, 2>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 1024, 2>(params, a, acc_d, mode);
                             break;
                         case 4:
-                            AddToAccCGGI_CUDA_core<800, 1024, 4>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 1024, 4>(params, a, acc_d, mode);
                             break;
                         case 6:
-                            AddToAccCGGI_CUDA_core<800, 1024, 6>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 1024, 6>(params, a, acc_d, mode);
                             break;
                         case 8:
-                            AddToAccCGGI_CUDA_core<800, 1024, 8>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 1024, 8>(params, a, acc_d, mode);
                             break;
                         case 10:
-                            AddToAccCGGI_CUDA_core<800, 1024, 10>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 1024, 10>(params, a, acc_d, mode);
                             break;
                         case 12:
-                            AddToAccCGGI_CUDA_core<800, 1024, 12>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 1024, 12>(params, a, acc_d, mode);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1470,22 +1472,22 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
                 case 2048:
                     switch (digitsG2){
                         case 2:
-                            AddToAccCGGI_CUDA_core<800, 2048, 2>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 2048, 2>(params, a, acc_d, mode);
                             break;
                         case 4:
-                            AddToAccCGGI_CUDA_core<800, 2048, 4>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 2048, 4>(params, a, acc_d, mode);
                             break;
                         case 6:
-                            AddToAccCGGI_CUDA_core<800, 2048, 6>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 2048, 6>(params, a, acc_d, mode);
                             break;
                         case 8:
-                            AddToAccCGGI_CUDA_core<800, 2048, 8>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 2048, 8>(params, a, acc_d, mode);
                             break;
                         case 10:
-                            AddToAccCGGI_CUDA_core<800, 2048, 10>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 2048, 10>(params, a, acc_d, mode);
                             break;
                         case 12:
-                            AddToAccCGGI_CUDA_core<800, 2048, 12>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<800, 2048, 12>(params, a, acc_d, mode);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1502,22 +1504,22 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
                 case 512:
                     switch (digitsG2){
                         case 2:
-                            AddToAccCGGI_CUDA_core<860, 512, 2>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 512, 2>(params, a, acc_d, mode);
                             break;
                         case 4:
-                            AddToAccCGGI_CUDA_core<860, 512, 4>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 512, 4>(params, a, acc_d, mode);
                             break;
                         case 6:
-                            AddToAccCGGI_CUDA_core<860, 512, 6>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 512, 6>(params, a, acc_d, mode);
                             break;
                         case 8:
-                            AddToAccCGGI_CUDA_core<860, 512, 8>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 512, 8>(params, a, acc_d, mode);
                             break;
                         case 10:
-                            AddToAccCGGI_CUDA_core<860, 512, 10>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 512, 10>(params, a, acc_d, mode);
                             break;
                         case 12:
-                            AddToAccCGGI_CUDA_core<860, 512, 12>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 512, 12>(params, a, acc_d, mode);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1527,22 +1529,22 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
                 case 1024:
                     switch (digitsG2){
                         case 2:
-                            AddToAccCGGI_CUDA_core<860, 1024, 2>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 1024, 2>(params, a, acc_d, mode);
                             break;
                         case 4:
-                            AddToAccCGGI_CUDA_core<860, 1024, 4>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 1024, 4>(params, a, acc_d, mode);
                             break;
                         case 6:
-                            AddToAccCGGI_CUDA_core<860, 1024, 6>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 1024, 6>(params, a, acc_d, mode);
                             break;
                         case 8:
-                            AddToAccCGGI_CUDA_core<860, 1024, 8>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 1024, 8>(params, a, acc_d, mode);
                             break;
                         case 10:
-                            AddToAccCGGI_CUDA_core<860, 1024, 10>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 1024, 10>(params, a, acc_d, mode);
                             break;
                         case 12:
-                            AddToAccCGGI_CUDA_core<860, 1024, 12>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 1024, 12>(params, a, acc_d, mode);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1552,22 +1554,22 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
                 case 2048:
                     switch (digitsG2){
                         case 2:
-                            AddToAccCGGI_CUDA_core<860, 2048, 2>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 2048, 2>(params, a, acc_d, mode);
                             break;
                         case 4:
-                            AddToAccCGGI_CUDA_core<860, 2048, 4>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 2048, 4>(params, a, acc_d, mode);
                             break;
                         case 6:
-                            AddToAccCGGI_CUDA_core<860, 2048, 6>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 2048, 6>(params, a, acc_d, mode);
                             break;
                         case 8:
-                            AddToAccCGGI_CUDA_core<860, 2048, 8>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 2048, 8>(params, a, acc_d, mode);
                             break;
                         case 10:
-                            AddToAccCGGI_CUDA_core<860, 2048, 10>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 2048, 10>(params, a, acc_d, mode);
                             break;
                         case 12:
-                            AddToAccCGGI_CUDA_core<860, 2048, 12>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<860, 2048, 12>(params, a, acc_d, mode);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1584,22 +1586,22 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
                 case 512:
                     switch (digitsG2){
                         case 2:
-                            AddToAccCGGI_CUDA_core<890, 512, 2>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 512, 2>(params, a, acc_d, mode);
                             break;
                         case 4:
-                            AddToAccCGGI_CUDA_core<890, 512, 4>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 512, 4>(params, a, acc_d, mode);
                             break;
                         case 6:
-                            AddToAccCGGI_CUDA_core<890, 512, 6>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 512, 6>(params, a, acc_d, mode);
                             break;
                         case 8:
-                            AddToAccCGGI_CUDA_core<890, 512, 8>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 512, 8>(params, a, acc_d, mode);
                             break;
                         case 10:
-                            AddToAccCGGI_CUDA_core<890, 512, 10>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 512, 10>(params, a, acc_d, mode);
                             break;
                         case 12:
-                            AddToAccCGGI_CUDA_core<890, 512, 12>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 512, 12>(params, a, acc_d, mode);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1609,22 +1611,22 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
                 case 1024:
                     switch (digitsG2){
                         case 2:
-                            AddToAccCGGI_CUDA_core<890, 1024, 2>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 1024, 2>(params, a, acc_d, mode);
                             break;
                         case 4:
-                            AddToAccCGGI_CUDA_core<890, 1024, 4>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 1024, 4>(params, a, acc_d, mode);
                             break;
                         case 6:
-                            AddToAccCGGI_CUDA_core<890, 1024, 6>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 1024, 6>(params, a, acc_d, mode);
                             break;
                         case 8:
-                            AddToAccCGGI_CUDA_core<890, 1024, 8>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 1024, 8>(params, a, acc_d, mode);
                             break;
                         case 10:
-                            AddToAccCGGI_CUDA_core<890, 1024, 10>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 1024, 10>(params, a, acc_d, mode);
                             break;
                         case 12:
-                            AddToAccCGGI_CUDA_core<890, 1024, 12>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 1024, 12>(params, a, acc_d, mode);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1634,22 +1636,22 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
                 case 2048:
                     switch (digitsG2){
                         case 2:
-                            AddToAccCGGI_CUDA_core<890, 2048, 2>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 2048, 2>(params, a, acc_d, mode);
                             break;
                         case 4:
-                            AddToAccCGGI_CUDA_core<890, 2048, 4>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 2048, 4>(params, a, acc_d, mode);
                             break;
                         case 6:
-                            AddToAccCGGI_CUDA_core<890, 2048, 6>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 2048, 6>(params, a, acc_d, mode);
                             break;
                         case 8:
-                            AddToAccCGGI_CUDA_core<890, 2048, 8>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 2048, 8>(params, a, acc_d, mode);
                             break;
                         case 10:
-                            AddToAccCGGI_CUDA_core<890, 2048, 10>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 2048, 10>(params, a, acc_d, mode);
                             break;
                         case 12:
-                            AddToAccCGGI_CUDA_core<890, 2048, 12>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<890, 2048, 12>(params, a, acc_d, mode);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1666,22 +1668,22 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
                 case 512:
                     switch (digitsG2){
                         case 2:
-                            AddToAccCGGI_CUDA_core<900, 512, 2>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 512, 2>(params, a, acc_d, mode);
                             break;
                         case 4:
-                            AddToAccCGGI_CUDA_core<900, 512, 4>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 512, 4>(params, a, acc_d, mode);
                             break;
                         case 6:
-                            AddToAccCGGI_CUDA_core<900, 512, 6>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 512, 6>(params, a, acc_d, mode);
                             break;
                         case 8:
-                            AddToAccCGGI_CUDA_core<900, 512, 8>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 512, 8>(params, a, acc_d, mode);
                             break;
                         case 10:
-                            AddToAccCGGI_CUDA_core<900, 512, 10>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 512, 10>(params, a, acc_d, mode);
                             break;
                         case 12:
-                            AddToAccCGGI_CUDA_core<900, 512, 12>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 512, 12>(params, a, acc_d, mode);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1691,22 +1693,22 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
                 case 1024:
                     switch (digitsG2){
                         case 2:
-                            AddToAccCGGI_CUDA_core<900, 1024, 2>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 1024, 2>(params, a, acc_d, mode);
                             break;
                         case 4:
-                            AddToAccCGGI_CUDA_core<900, 1024, 4>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 1024, 4>(params, a, acc_d, mode);
                             break;
                         case 6:
-                            AddToAccCGGI_CUDA_core<900, 1024, 6>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 1024, 6>(params, a, acc_d, mode);
                             break;
                         case 8:
-                            AddToAccCGGI_CUDA_core<900, 1024, 8>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 1024, 8>(params, a, acc_d, mode);
                             break;
                         case 10:
-                            AddToAccCGGI_CUDA_core<900, 1024, 10>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 1024, 10>(params, a, acc_d, mode);
                             break;
                         case 12:
-                            AddToAccCGGI_CUDA_core<900, 1024, 12>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 1024, 12>(params, a, acc_d, mode);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1716,22 +1718,22 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
                 case 2048:
                     switch (digitsG2){
                         case 2:
-                            AddToAccCGGI_CUDA_core<900, 2048, 2>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 2048, 2>(params, a, acc_d, mode);
                             break;
                         case 4:
-                            AddToAccCGGI_CUDA_core<900, 2048, 4>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 2048, 4>(params, a, acc_d, mode);
                             break;
                         case 6:
-                            AddToAccCGGI_CUDA_core<900, 2048, 6>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 2048, 6>(params, a, acc_d, mode);
                             break;
                         case 8:
-                            AddToAccCGGI_CUDA_core<900, 2048, 8>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 2048, 8>(params, a, acc_d, mode);
                             break;
                         case 10:
-                            AddToAccCGGI_CUDA_core<900, 2048, 10>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 2048, 10>(params, a, acc_d, mode);
                             break;
                         case 12:
-                            AddToAccCGGI_CUDA_core<900, 2048, 12>(params, a, acc_d);
+                            AddToAccCGGI_CUDA_core<900, 2048, 12>(params, a, acc_d, mode);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1750,7 +1752,7 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
 }
 
 template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
-void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d)
+void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d, std::string mode)
 {   
     /* parameters set */
     auto mod        = a.GetModulus();
@@ -1778,11 +1780,21 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
                             cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
 
     /* Check whether block size exceeds cuda limitation */
-    if((NHalf / FFT::elements_per_thread * digitsG2) > gpuInfoList[0].maxThreadsPerBlock){
-        std::cerr << "Exceed Maximum blocks per threads (" << gpuInfoList[0].maxThreadsPerBlock << ")\n";
-        std::cerr << "Using " << (NHalf / FFT::elements_per_thread * digitsG2) << " threads" << ")\n";
-        std::cerr << "NHalf: " << NHalf << "FFT::elements_per_thread: " << FFT::elements_per_thread << "digitsG2: " << digitsG2 << ")\n";
-        exit(1);
+    if(mode == "SINGLE"){
+        if((NHalf / FFT::elements_per_thread * digitsG2) > gpuInfoList[0].maxThreadsPerBlock){
+            std::cerr << "Exceed Maximum blocks per threads (" << gpuInfoList[0].maxThreadsPerBlock << ")\n";
+            std::cerr << "Using " << (NHalf / FFT::elements_per_thread * digitsG2) << " threads" << ")\n";
+            std::cerr << "NHalf: " << NHalf << "FFT::elements_per_thread: " << FFT::elements_per_thread << "digitsG2: " << digitsG2 << ")\n";
+            exit(1);
+        }
+    }
+    else if(mode == "MULTI"){
+        if((NHalf / FFT_multi::elements_per_thread * 2) > gpuInfoList[0].maxThreadsPerBlock){
+            std::cerr << "Exceed Maximum blocks per threads (" << gpuInfoList[0].maxThreadsPerBlock << ")\n";
+            std::cerr << "Using " << (NHalf / FFT_multi::elements_per_thread * digitsG2) << " threads" << ")\n";
+            std::cerr << "NHalf: " << NHalf << "FFT::elements_per_thread: " << FFT_multi::elements_per_thread << "digitsG2: " << digitsG2 << ")\n";
+            exit(1);
+        }
     }
 
     /* Initialize a_arr */
@@ -1809,16 +1821,17 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     cudaMemcpy(acc_CUDA, acc_d_arr, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice);
 
     /* Launch boostrapping kernel */
-    void *kernelArgs[] = {(void *)&acc_CUDA, (void *)&ct_CUDA, (void *)&dct_CUDA, (void *)&a_CUDA, 
-        (void *)&monomial_CUDA, (void *)&twiddleTable_CUDA, (void *)&params_CUDA, (void *)&GINX_bootstrappingKey_CUDA};
-    cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT_multi, IFFT_multi>), digitsG2/2, FFT_multi::block_dim, kernelArgs, FFT_multi::shared_memory_size);
+    if(mode == "SINGLE"){
+        bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size>>>
+            (acc_CUDA, ct_CUDA, dct_CUDA, a_CUDA, monomial_CUDA, twiddleTable_CUDA, params_CUDA, GINX_bootstrappingKey_CUDA);
+    }
+    else if(mode == "MULTI"){
+        void *kernelArgs[] = {(void *)&acc_CUDA, (void *)&ct_CUDA, (void *)&dct_CUDA, (void *)&a_CUDA, 
+            (void *)&monomial_CUDA, (void *)&twiddleTable_CUDA, (void *)&params_CUDA, (void *)&GINX_bootstrappingKey_CUDA};
+        cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT_multi, IFFT_multi>), digitsG2/2, FFT_multi::block_dim, kernelArgs, FFT_multi::shared_memory_size);
+    }
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
-    // /* Launch boostrapping kernel */
-    // bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size>>>
-    //     (acc_CUDA, ct_CUDA, dct_CUDA, a_CUDA, monomial_CUDA, twiddleTable_CUDA, params_CUDA, GINX_bootstrappingKey_CUDA);
-    // CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
-    // CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
 
     /* Copy the acc_d_arr to acc_d */
     cudaMemcpy(acc_d_arr, acc_CUDA, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost);
@@ -1861,6 +1874,48 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
 }
 
 };  // namespace lbcrypto
+
+// /* Initialize a_arr */
+// uint64_t* a_arr[bootstrap_num];
+// uint64_t* a_CUDA[bootstrap_num];
+// for (int s = 0; s < bootstrap_num; s++) {
+//     cudaMallocHost((void**)&a_arr[s], n * sizeof(Complex));
+//     for (size_t i = 0; i < n; ++i)
+//         a_arr[s][i] = (mod.ModSub(a[i], mod) * (M / modInt)).ConvertToInt();
+//     cudaMalloc(&a_CUDA[s], n * sizeof(Complex_d));
+// }
+
+// /* Initialize acc_d_arr */
+// Complex* acc_d_arr[bootstrap_num];
+// Complex_d* acc_CUDA[bootstrap_num];
+// for (int s = 0; s < bootstrap_num; s++) {
+//     cudaMallocHost((void**)&acc_d_arr[s], 2 * NHalf * sizeof(Complex));
+//     for(int i = 0; i < 2; i++)
+//         for(int j = 0; j < NHalf; j++)
+//             acc_d_arr[s][i*NHalf + j] = Complex(acc_d[i][j].real(), acc_d[i][j + NHalf].real());
+//     cudaMalloc(&acc_CUDA[s], 2 * NHalf * sizeof(Complex_d));
+// }
+
+// int SM_count = streams.size();
+// for (int s = 0; s < bootstrap_num; s++) {
+//     cudaMemcpyAsync(a_CUDA[s], a_arr[s], n * sizeof(Complex_d), cudaMemcpyHostToDevice, streams[s % SM_count]);
+//     cudaMemcpyAsync(acc_CUDA[s], acc_d_arr[s], 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, streams[s % SM_count]);
+//     void *kernelArgs[] = {(void *)&acc_CUDA[s], (void *)&ct_CUDA, (void *)&dct_CUDA, (void *)&a_CUDA[s], 
+//         (void *)&monomial_CUDA, (void *)&twiddleTable_CUDA, (void *)&params_CUDA, (void *)&GINX_bootstrappingKey_CUDA};
+//     cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT_multi, IFFT_multi>), digitsG2/2, FFT_multi::block_dim, kernelArgs, FFT_multi::shared_memory_size, streams[s % SM_count]);
+//     cudaMemcpyAsync(acc_d_arr[s], acc_CUDA[s], 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, streams[s % SM_count]);
+//     //std::cout<<"s: "<<s<<std::endl;
+// }
+// CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+// CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+
+// /* Free memory */     
+// for (int s = 0; s < bootstrap_num; s++) {
+//     cudaFree(a_CUDA[s]);
+//     cudaFreeHost(a_arr[s]);
+//     cudaFree(acc_CUDA[s]);
+//     cudaFreeHost(acc_d_arr[s]);
+// }
 
 // int main(){
 //     /* Set number of bootstrapping */

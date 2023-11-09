@@ -4,6 +4,7 @@
 #ifdef __CUDACC__
 
 #include <vector>
+#include <string>
 #include <cuComplex.h>
 #include <cuda_runtime.h>
 #include <cooperative_groups.h>
@@ -41,6 +42,7 @@ __global__ void cuFFTDxFWD(Complex_d* data, Complex_d* twiddleTable_CUDA);
 
 #include <iostream>
 #include <vector>
+#include <string>
 #include "rgsw-cryptoparameters.h"
 #include "math/dftransform.h"
 
@@ -73,10 +75,10 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
 template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
 void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> GINX_bootstrappingKey_FFT,const std::shared_ptr<RingGSWCryptoParams> params);
 
-void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d);
+void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d, std::string mode);
 
 template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
-void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d);
+void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d, std::string mode);
 
 };  // namespace lbcrypto
 
