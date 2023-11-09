@@ -45,5 +45,6 @@ To build the project, follow these steps:
 ```
 4. Run the example to test the library:
 ```bash
+   ./build_release/bin/examples/binfhe/boolean
    ./build_release/bin/examples/binfhe/eval-function
 ```

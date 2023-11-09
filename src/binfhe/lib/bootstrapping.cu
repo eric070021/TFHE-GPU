@@ -15,13 +15,15 @@
 
 namespace lbcrypto {
 
+/* Vector used to store multiple GPUs INFO */
 std::vector<GPUInfo> gpuInfoList;
 
 template<class FFT, class IFFT>
 __launch_bounds__(FFT::max_threads_per_block)
 __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
         Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, uint64_t* params_CUDA, Complex_d* GINX_bootstrappingKey_CUDA){
-
+    
+    /* GPU Parameters Set */
     cg::grid_group grid = cg::this_grid();
     uint32_t tid = ThisThreadRankInBlock(); // thread id in block
     uint32_t bid = grid.block_rank(); // block id in grid
@@ -29,6 +31,7 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
     uint32_t bdim = ThisBlockSize(); // size of block
     uint32_t gdim = grid.num_threads(); // number of threads in grid
 
+    /* HE Parameters Set */
     uint64_t M            = params_CUDA[0] << 1;
     uint64_t N            = params_CUDA[0];
     uint64_t NHalf        = N >> 1;
@@ -342,10 +345,12 @@ template<class FFT, class IFFT>
 __launch_bounds__(FFT::max_threads_per_block)
 __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
         Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, uint64_t* params_CUDA, Complex_d* GINX_bootstrappingKey_CUDA){
-
+    
+    /* GPU Parameters Set */
     uint32_t tid = ThisThreadRankInBlock();
     uint32_t bdim = ThisBlockSize();
 
+    /* HE Parameters Set */
     uint64_t M            = params_CUDA[0] << 1;
     uint64_t N            = params_CUDA[0];
     uint64_t NHalf        = N >> 1;
@@ -357,7 +362,7 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
     int32_t gBits = static_cast<int32_t>(log2(static_cast<double>(baseG)));
     int32_t gBitsMaxBits = 64 - gBits;
     uint32_t RGSW_size = digitsG2 * 2 * NHalf;
-    uint32_t syncNum      = static_cast<uint32_t>(params_CUDA[5]); // number of synchronization
+    uint32_t syncNum      = static_cast<uint32_t>(params_CUDA[5]); // number of synchronization (cufftdx)
 
     /* cufftdx variables */
     using complex_type = typename FFT::value_type;
@@ -1206,12 +1211,6 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
                         cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<1>() + cufftdx::SM<arch>());
 
     /* Increase max shared memory */
-    // Check whether shared memory size exceeds cuda limitation
-    if(FFT::shared_memory_size > gpuInfoList[0].sharedMemoryPerBlock){
-        std::cerr << "Exceed Maximum sharedMemoryPerBlock ("<< gpuInfoList[0].sharedMemoryPerBlock << ")\n";
-        exit(1);
-    }
-
     // Single block Bootstrapping shared memory size
     if(FFT::shared_memory_size > 65536)
         cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 100);
@@ -1263,7 +1262,6 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
         std::cerr << "Hasn't tested on this GPU yet, please contact r11922138@ntu.edu.tw" << std::endl;
         exit(1);
     }
-
     // Bring params_CUDA to GPU
     cudaMalloc(&params_CUDA, 6 * sizeof(uint64_t));
     cudaMemcpy(params_CUDA, paramters, 6 * sizeof(uint64_t), cudaMemcpyHostToDevice);
@@ -1805,6 +1803,22 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
         }
     }
 
+    /* Check whether shared memory size exceeds cuda limitation */
+    if(mode == "SINGLE"){
+        if(FFT::shared_memory_size > gpuInfoList[0].sharedMemoryPerBlock){
+            std::cerr << "Exceed Maximum sharedMemoryPerBlock ("<< gpuInfoList[0].sharedMemoryPerBlock << ")\n";
+            std::cerr << "Declare "<< FFT::shared_memory_size << " now" << "\n";
+            exit(1);
+        }
+    }
+    else if(mode == "MULTI"){
+        if(FFT_multi::shared_memory_size > gpuInfoList[0].sharedMemoryPerBlock){
+            std::cerr << "Exceed Maximum sharedMemoryPerBlock ("<< gpuInfoList[0].sharedMemoryPerBlock << ")\n";
+            std::cerr << "Declare "<< FFT_multi::shared_memory_size << " now" << "\n";
+            exit(1);
+        }
+    }
+
     /* Initialize a_arr */
     uint64_t* a_arr;
     uint64_t* a_CUDA;
@@ -1841,7 +1855,7 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
 
-    /* Copy the acc_d_arr to acc_d */
+    /* Copy acc_d_arr back to acc_d */
     cudaMemcpy(acc_d_arr, acc_CUDA, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost);
     for(int i = 0; i < 2; i++){
         for(int j = 0; j < NHalf; j++){
@@ -1926,29 +1940,6 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
 // }
 
 // int main(){
-//     /* Set number of bootstrapping */
-//     const int bootstrap_num = 4096;
-
-//     /* Initialize bootstrapping key */
-//     Complex *bootstrappingKey;
-//     cudaMallocHost((void**)&bootstrappingKey, 500 * RGSW_size * sizeof(Complex));
-//     for(int i = 0; i < 500; i++)
-//         for(int j = 0; j < digitsG2 * 2 * fft_size; j++)
-//             bootstrappingKey[i*RGSW_size + j] = Complex(j, -j);
-
-//     /* Bring bootstrapping key to GPU */
-//     Complex_d* bootstrappingKey_dev;
-//     cudaMalloc(&bootstrappingKey_dev, 500 * RGSW_size * sizeof(Complex_d));
-//     cudaMemcpy(bootstrappingKey_dev, bootstrappingKey, 500 * RGSW_size * sizeof(Complex_d), cudaMemcpyHostToDevice);
-
-//     /* Precompue twiddle table */
-//     precomputeTable();
-
-//     /* Increase max shared memory */
-//     cudaFuncSetAttribute(bootstrapping_Baseline<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 100);
-//     cudaFuncSetAttribute(bootstrapping_Baseline<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize,
-//         81920);
-
 //     // Create CUDA streams for parallel gates.
 //     cudaStream_t streams[bootstrap_num];
 //     for (int s = 0; s < bootstrap_num; s++) {
@@ -1997,14 +1988,4 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
 //         cudaStreamDestroy(streams[s]);
 //     }
 //     cudaFreeHost(bootstrappingKey);
-
-//     /* print ciphertext */
-//     // for(int i = 0; i < 2; i++){
-//     //     for(int j = 0; j < fft_size; j++){
-//     //         std::cout << input[i*fft_size + j] << " ";
-//     //     }
-//     //     std::cout << std::endl;
-//     // }
-
-//     return 0;
 // }
