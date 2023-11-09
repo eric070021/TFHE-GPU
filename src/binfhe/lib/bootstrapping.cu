@@ -11,7 +11,6 @@
         }
 #endif // CUDA_CHECK_AND_EXIT
 
-#define sync_num 8
 #define bootstrap_num 10000
 
 namespace lbcrypto {
@@ -358,6 +357,7 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
     int32_t gBits = static_cast<int32_t>(log2(static_cast<double>(baseG)));
     int32_t gBitsMaxBits = 64 - gBits;
     uint32_t RGSW_size = digitsG2 * 2 * NHalf;
+    uint32_t syncNum      = static_cast<uint32_t>(params_CUDA[5]); // number of synchronization
 
     /* cufftdx variables */
     using complex_type = typename FFT::value_type;
@@ -395,7 +395,7 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
         }
     }
     else{ // must meet syncs made by FFT
-        for(uint32_t i = 0; i < sync_num; ++i)
+        for(uint32_t i = 0; i < syncNum; ++i)
             __syncthreads();
     }
     __syncthreads();
@@ -455,7 +455,7 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
             }
         }
         else{ // must meet syncs made by IFFT
-            for(uint32_t i = 0; i < sync_num; ++i)
+            for(uint32_t i = 0; i < syncNum; ++i)
                 __syncthreads();
         }
         __syncthreads();
@@ -662,7 +662,7 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
         }
     }
     else{ // must meet syncs made by IFFT
-       for(uint32_t i = 0; i < sync_num; ++i)
+       for(uint32_t i = 0; i < syncNum; ++i)
             __syncthreads();
     }
     __syncthreads();
@@ -1250,15 +1250,23 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
 
     /* Initialize params_CUDA */
     uint64_t *paramters;
-    cudaMallocHost((void**)&paramters, 5 * sizeof(uint64_t));
+    cudaMallocHost((void**)&paramters, 6 * sizeof(uint64_t));
     paramters[0] = N;
     paramters[1] = n;
     paramters[2] = static_cast<uint64_t>(Q_int);
     paramters[3] = digitsG2;
     paramters[4] = baseG;
+    auto it = synchronizationMap.find({arch, FFT_dimension});
+    if (it != synchronizationMap.end() && it->second != 0) {
+        paramters[5] = static_cast<uint64_t>(it->second);
+    } else {
+        std::cerr << "Hasn't tested on this GPU yet, please contact r11922138@ntu.edu.tw" << std::endl;
+        exit(1);
+    }
+
     // Bring params_CUDA to GPU
-    cudaMalloc(&params_CUDA, 5 * sizeof(uint64_t));
-    cudaMemcpy(params_CUDA, paramters, 5 * sizeof(uint64_t), cudaMemcpyHostToDevice);
+    cudaMalloc(&params_CUDA, 6 * sizeof(uint64_t));
+    cudaMemcpy(params_CUDA, paramters, 6 * sizeof(uint64_t), cudaMemcpyHostToDevice);
     cudaFreeHost(paramters);
 
     /* Initialize bootstrapping key */
@@ -1792,7 +1800,7 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
         if((NHalf / FFT_multi::elements_per_thread * 2) > gpuInfoList[0].maxThreadsPerBlock){
             std::cerr << "Exceed Maximum blocks per threads (" << gpuInfoList[0].maxThreadsPerBlock << ")\n";
             std::cerr << "Using " << (NHalf / FFT_multi::elements_per_thread * digitsG2) << " threads" << ")\n";
-            std::cerr << "NHalf: " << NHalf << "FFT::elements_per_thread: " << FFT_multi::elements_per_thread << "digitsG2: " << digitsG2 << ")\n";
+            std::cerr << "NHalf: " << NHalf << "FFT::elements_per_thread: " << FFT_multi::elements_per_thread << ")\n";
             exit(1);
         }
     }
@@ -2000,17 +2008,3 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
 
 //     return 0;
 // }
-
-
-// Complex_d *input_dev;
-// size_t input_pitch;
-// cudaMallocPitch(&input_dev, &input_pitch, 2 * sizeof(Complex_d), N);
-// cudaMemcpy2D(input_dev, input_pitch, input, 2 * sizeof(Complex_d), 2 * sizeof(Complex_d), N, cudaMemcpyHostToDevice);
-
-// cudaMemcpy2D(input, 2 * sizeof(Complex_d), input_dev, input_pitch, 2 * sizeof(Complex_d), N, cudaMemcpyDeviceToHost);
-
-// cudaFuncSetAttribute(bootstrapping_Baseline, cudaFuncAttributePreferredSharedMemoryCarveout, cudaSharedmemCarveoutMaxShared);
-// cudaFuncSetAttribute(bootstrapping_Baseline, cudaFuncAttributeMaxDynamicSharedMemorySize, 101376);
-
-// cudaFuncSetAttribute(bootstrapping_Baseline<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, cudaSharedmemCarveoutMaxShared);
-// cudaFuncSetAttribute(bootstrapping_Baseline<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, 101376);

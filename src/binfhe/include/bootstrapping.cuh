@@ -5,6 +5,7 @@
 
 #include <vector>
 #include <string>
+#include <map>
 #include <cuComplex.h>
 #include <cuda_runtime.h>
 #include <cooperative_groups.h>
@@ -42,6 +43,7 @@ __global__ void cuFFTDxFWD(Complex_d* data, Complex_d* twiddleTable_CUDA);
 
 #include <iostream>
 #include <vector>
+#include <map>
 #include <string>
 #include "rgsw-cryptoparameters.h"
 #include "math/dftransform.h"
@@ -52,7 +54,18 @@ __global__ void cuFFTDxFWD(Complex_d* data, Complex_d* twiddleTable_CUDA);
 
 typedef std::complex<double> Complex;
 
+
 namespace lbcrypto {
+
+struct syncKey {
+    uint32_t cudaArch;
+    uint32_t FFT_dimension;
+    // Define comparison operator for the key
+    bool operator<(const syncKey& other) const {
+        return std::tie(cudaArch, FFT_dimension) < std::tie(other.cudaArch, other.FFT_dimension);
+    }
+};
+
 struct GPUInfo {
     std::string name;
     int major;
@@ -69,6 +82,25 @@ struct GPUInfo {
     int warpSize;
     int multiprocessorCount;
 };
+
+const std::map<syncKey, uint32_t> synchronizationMap({
+  // arch | dim | syncNum
+    {{700, 512},    0},
+    {{700, 1024},   0},
+    {{700, 2048},   0},
+    {{800, 512},    0},
+    {{800, 1024},   0},
+    {{800, 2048},   0},
+    {{860, 512},    0},
+    {{860, 1024},   0},
+    {{860, 2048},   0},
+    {{890, 512},    8},
+    {{890, 1024},   12},
+    {{890, 2048},   0},
+    {{900, 512},    0},
+    {{900, 1024},   0},
+    {{900, 2048},   0},
+});
 
 void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> GINX_bootstrappingKey_FFT,const std::shared_ptr<RingGSWCryptoParams> params);
 
