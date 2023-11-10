@@ -128,10 +128,10 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
 /***************************************
 *  ACC that support vector of ciphertexts 
 ****************************************/
-void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<std::vector<Complex>>>& acc_d, std::string mode);
+void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, std::vector<std::vector<std::vector<Complex>>>& acc_d, std::string mode);
 
 template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
-void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<std::vector<Complex>>>& acc_d, std::string mode);
+void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, std::vector<std::vector<std::vector<Complex>>>& acc_d, std::string mode);
 
 };  // namespace lbcrypto
 
