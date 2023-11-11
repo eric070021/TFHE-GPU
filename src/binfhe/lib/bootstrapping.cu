@@ -1186,6 +1186,8 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     uint32_t baseG = params->GetBaseG();
     uint32_t RGSW_size = digitsG2 * 2 * NHalf;
 
+    int SM_count = gpuInfoList[0].multiprocessorCount;
+
     /* Create cuda streams */
     streams.resize(gpuInfoList[0].multiprocessorCount);
     for (int s = 0; s < gpuInfoList[0].multiprocessorCount; s++) {
@@ -1323,10 +1325,10 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     cudaDeviceSynchronize();
 
     /* Allocate ct_CUDA on GPU */
-    cudaMalloc(&ct_CUDA, 2 * NHalf * sizeof(Complex_d));
+    cudaMalloc(&ct_CUDA, SM_count * 2 * NHalf * sizeof(Complex_d));
 
     /* Allocate dct_CUDA on GPU */
-    cudaMalloc(&dct_CUDA, digitsG2 * NHalf * sizeof(Complex_d));
+    cudaMalloc(&dct_CUDA, SM_count * digitsG2 * NHalf * sizeof(Complex_d));
 }
 
 void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d, std::string mode)
@@ -2337,7 +2339,7 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     uint32_t digitsG2 = params->GetDigitsG() << 1;
 
     int bootstrap_num = acc_d.size();
-    int SM_count = streams.size();
+    int SM_count = gpuInfoList[0].multiprocessorCount;
 
     /* Configure cuFFTDx */
     using FFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() + cufftdx::ElementsPerThread<8>() +
@@ -2410,19 +2412,21 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
             cudaMemcpyAsync(a_CUDA + s*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[s % SM_count]);
             cudaMemcpyAsync(acc_CUDA + s*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, streams[s % SM_count]);
             bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size, streams[s % SM_count]>>>
-                (acc_CUDA + s*2*NHalf, ct_CUDA, dct_CUDA, a_CUDA + s*n, monomial_CUDA, twiddleTable_CUDA, params_CUDA, GINX_bootstrappingKey_CUDA);
+                (acc_CUDA + s*2*NHalf, ct_CUDA + (s % SM_count)*2*NHalf, dct_CUDA + (s % SM_count)*digitsG2*NHalf, a_CUDA + s*n, monomial_CUDA, twiddleTable_CUDA, params_CUDA, GINX_bootstrappingKey_CUDA);
             cudaMemcpyAsync(acc_d_arr + s*2*NHalf, acc_CUDA + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, streams[s % SM_count]);
         }
     }
     else if(mode == "MULTI"){
-        Complex_d* acc_CUDA_offset;
+        Complex_d* acc_CUDA_offset, *ct_CUDA_offset, *dct_CUDA_offset;
         uint64_t* a_CUDA_offset;
         for (int s = 0; s < bootstrap_num; s++) {
             acc_CUDA_offset = acc_CUDA + s*2*NHalf;
+            ct_CUDA_offset = ct_CUDA + (s % SM_count)*2*NHalf;
+            dct_CUDA_offset = dct_CUDA + (s % SM_count)*digitsG2*NHalf;
             a_CUDA_offset = a_CUDA + s*n;
             cudaMemcpyAsync(a_CUDA + s*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[s % SM_count]);
             cudaMemcpyAsync(acc_CUDA + s*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, streams[s % SM_count]);
-            void *kernelArgs[] = {(void *)&acc_CUDA_offset, (void *)&ct_CUDA, (void *)&dct_CUDA, (void *)&a_CUDA_offset, 
+            void *kernelArgs[] = {(void *)&acc_CUDA_offset, (void *)&ct_CUDA_offset, (void *)&dct_CUDA_offset, (void *)&a_CUDA_offset, 
                 (void *)&monomial_CUDA, (void *)&twiddleTable_CUDA, (void *)&params_CUDA, (void *)&GINX_bootstrappingKey_CUDA};
             cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT_multi, IFFT_multi>), digitsG2/2, FFT_multi::block_dim, 
                 kernelArgs, FFT_multi::shared_memory_size, streams[s % SM_count]);

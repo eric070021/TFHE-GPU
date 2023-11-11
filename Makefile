@@ -17,7 +17,7 @@ clean_debug:
 
 build_debug:
 	cd ./build_debug && \
-	make -j16
+	make -j
 
 cache_clean_debug:
 	cd ./build_debug && \
@@ -35,7 +35,7 @@ clean_release:
 
 build_release:
 	cd ./build_release && \
-	make -j16
+	make -j
 
 cache_clean_release:
 	cd ./build_release && \
