@@ -18,6 +18,30 @@ typedef cuDoubleComplex Complex_d;
 
 namespace lbcrypto {
 
+/* Struct used to store GPU INFO */
+struct GPUInfo {
+    std::string name;
+    int major;
+    int minor;
+    int sharedMemoryPerBlock;
+    int maxBlocksPerMultiprocessor;
+    int maxThreadsPerBlock;
+    int maxGridX;
+    int maxGridY;
+    int maxGridZ;
+    int maxBlockX;
+    int maxBlockY;
+    int maxBlockZ;
+    int warpSize;
+    int multiprocessorCount;
+};
+
+/* Vector used to store multiple GPUs INFO */
+std::vector<GPUInfo> gpuInfoList;
+
+/* CUDA streams for parallel bootstrapping */
+std::vector<cudaStream_t> streams;
+
 /* Global memory variables */
 __device__ Complex_d* GINX_bootstrappingKey_CUDA;
 __device__ Complex_d* monomial_CUDA;
@@ -25,9 +49,8 @@ __device__ Complex_d* twiddleTable_CUDA;
 __device__ Complex_d* ct_CUDA;
 __device__ Complex_d* dct_CUDA;
 __device__ uint64_t* params_CUDA;
-
-/* CUDA streams for parallel bootstrapping */
-std::vector<cudaStream_t> streams;
+__device__ Complex_d* acc_CUDA;
+__device__ uint64_t* a_CUDA;
 
 /* Multiple small thread blocks mode bootstrapping */
 template<class FFT, class IFFT>
@@ -60,24 +83,6 @@ typedef std::complex<double> Complex;
 
 
 namespace lbcrypto {
-
-/* Struct used to store GPU INFO */
-struct GPUInfo {
-    std::string name;
-    int major;
-    int minor;
-    int sharedMemoryPerBlock;
-    int maxBlocksPerMultiprocessor;
-    int maxThreadsPerBlock;
-    int maxGridX;
-    int maxGridY;
-    int maxGridZ;
-    int maxBlockX;
-    int maxBlockY;
-    int maxBlockZ;
-    int warpSize;
-    int multiprocessorCount;
-};
 
 /* Struct used to query synchronizationMap */
 struct syncKey {

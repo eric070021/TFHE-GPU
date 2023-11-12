@@ -167,11 +167,11 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
         acc_d[1][i].real(static_cast<BasicFloat>(d));
     }
 
-    const std::vector<NativeVector> a_t (10000, a);
-    std::vector<std::vector<std::vector<Complex>>> acc_d_t (10000, acc_d);
+    const std::vector<NativeVector> a_t (1, a);
+    std::vector<std::vector<std::vector<Complex>>> acc_d_t (1, acc_d);
     AddToAccCGGI_CUDA(params, a_t, acc_d_t, "MULTI");
     acc_d = acc_d_t[0];
-    //AddToAccCGGI_CUDA(params, a, acc_d, "MULTI");
+    // AddToAccCGGI_CUDA(params, a, acc_d, "SINGLE");
     
     // DiscreteFourierTransform::NegacyclicForwardTransform(acc_d[0]);
     // DiscreteFourierTransform::NegacyclicForwardTransform(acc_d[1]);

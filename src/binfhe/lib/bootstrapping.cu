@@ -13,9 +13,6 @@
 
 namespace lbcrypto {
 
-/* Vector used to store multiple GPUs INFO */
-std::vector<GPUInfo> gpuInfoList;
-
 template<class FFT, class IFFT>
 __launch_bounds__(FFT::max_threads_per_block)
 __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
@@ -1329,6 +1326,12 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
 
     /* Allocate dct_CUDA on GPU */
     cudaMalloc(&dct_CUDA, SM_count * digitsG2 * NHalf * sizeof(Complex_d));
+
+    /* Allocate acc_CUDA on GPU */
+    cudaMalloc(&acc_CUDA, SM_count * 2 * NHalf * sizeof(Complex_d));
+
+    /* Allocate a_CUDA on GPU */
+    cudaMalloc(&a_CUDA, SM_count * n * sizeof(uint64_t));
 }
 
 void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d, std::string mode)
@@ -1821,25 +1824,21 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
 
     /* Initialize a_arr */
     uint64_t* a_arr;
-    uint64_t* a_CUDA;
     cudaMallocHost((void**)&a_arr, n * sizeof(uint64_t));
     for (size_t i = 0; i < n; ++i) {
         a_arr[i] = (mod.ModSub(a[i], mod) * (M / modInt)).ConvertToInt();
     }
     // Bring a to GPU
-    cudaMalloc(&a_CUDA, n * sizeof(uint64_t));
     cudaMemcpy(a_CUDA, a_arr, n * sizeof(uint64_t), cudaMemcpyHostToDevice);
     cudaFreeHost(a_arr);
 
     /* Initialize acc_d_arr */
     Complex* acc_d_arr;
-    Complex_d* acc_CUDA;
     cudaMallocHost((void**)&acc_d_arr, 2 * NHalf * sizeof(Complex));
     for(int i = 0; i < 2; i++)
         for(int j = 0; j < NHalf; j++)
             acc_d_arr[i*NHalf + j] = Complex(acc_d[i][j].real(), acc_d[i][j + NHalf].real());   
     // Bring acc_d to GPU
-    cudaMalloc(&acc_CUDA, 2 * NHalf * sizeof(Complex_d));
     cudaMemcpy(acc_CUDA, acc_d_arr, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice);
 
     /* Launch boostrapping kernel */
@@ -2390,47 +2389,44 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
 
     /* Initialize a_arr */
     uint64_t* a_arr;
-    uint64_t* a_CUDA;
     cudaMallocHost((void**)&a_arr, bootstrap_num * n * sizeof(uint64_t));
     for (int s = 0; s < bootstrap_num; s++)
         for (size_t i = 0; i < n; ++i)
             a_arr[s*n + i] = (mod.ModSub(a[s][i], mod) * (M / modInt)).ConvertToInt();
-    cudaMalloc((void**)&a_CUDA, bootstrap_num * n * sizeof(uint64_t));
 
     /* Initialize acc_d_arr */
     Complex* acc_d_arr;
-    Complex_d* acc_CUDA;
     cudaMallocHost((void**)&acc_d_arr, bootstrap_num * 2 * NHalf * sizeof(Complex));
     for (int s = 0; s < bootstrap_num; s++)
         for(int i = 0; i < 2; i++)
             for(int j = 0; j < NHalf; j++)
                 acc_d_arr[s*2*NHalf + i*NHalf + j] = Complex(acc_d[s][i][j].real(), acc_d[s][i][j + NHalf].real());
-    cudaMalloc((void**)&acc_CUDA, bootstrap_num * 2 * NHalf * sizeof(Complex_d));
 
     if(mode == "SINGLE"){
         for (int s = 0; s < bootstrap_num; s++) {
-            cudaMemcpyAsync(a_CUDA + s*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[s % SM_count]);
-            cudaMemcpyAsync(acc_CUDA + s*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, streams[s % SM_count]);
+            cudaMemcpyAsync(a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[s % SM_count]);
+            cudaMemcpyAsync(acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, streams[s % SM_count]);
             bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size, streams[s % SM_count]>>>
-                (acc_CUDA + s*2*NHalf, ct_CUDA + (s % SM_count)*2*NHalf, dct_CUDA + (s % SM_count)*digitsG2*NHalf, a_CUDA + s*n, monomial_CUDA, twiddleTable_CUDA, params_CUDA, GINX_bootstrappingKey_CUDA);
-            cudaMemcpyAsync(acc_d_arr + s*2*NHalf, acc_CUDA + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, streams[s % SM_count]);
+                (acc_CUDA + (s % SM_count)*2*NHalf, ct_CUDA + (s % SM_count)*2*NHalf, dct_CUDA + (s % SM_count)*digitsG2*NHalf, a_CUDA + (s % SM_count)*n, 
+                monomial_CUDA, twiddleTable_CUDA, params_CUDA, GINX_bootstrappingKey_CUDA);
+            cudaMemcpyAsync(acc_d_arr + s*2*NHalf, acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, streams[s % SM_count]);
         }
     }
     else if(mode == "MULTI"){
         Complex_d* acc_CUDA_offset, *ct_CUDA_offset, *dct_CUDA_offset;
         uint64_t* a_CUDA_offset;
         for (int s = 0; s < bootstrap_num; s++) {
-            acc_CUDA_offset = acc_CUDA + s*2*NHalf;
+            acc_CUDA_offset = acc_CUDA + (s % SM_count)*2*NHalf;
             ct_CUDA_offset = ct_CUDA + (s % SM_count)*2*NHalf;
             dct_CUDA_offset = dct_CUDA + (s % SM_count)*digitsG2*NHalf;
-            a_CUDA_offset = a_CUDA + s*n;
-            cudaMemcpyAsync(a_CUDA + s*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[s % SM_count]);
-            cudaMemcpyAsync(acc_CUDA + s*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, streams[s % SM_count]);
+            a_CUDA_offset = a_CUDA + (s % SM_count)*n;
+            cudaMemcpyAsync(a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[s % SM_count]);
+            cudaMemcpyAsync(acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, streams[s % SM_count]);
             void *kernelArgs[] = {(void *)&acc_CUDA_offset, (void *)&ct_CUDA_offset, (void *)&dct_CUDA_offset, (void *)&a_CUDA_offset, 
                 (void *)&monomial_CUDA, (void *)&twiddleTable_CUDA, (void *)&params_CUDA, (void *)&GINX_bootstrappingKey_CUDA};
             cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT_multi, IFFT_multi>), digitsG2/2, FFT_multi::block_dim, 
                 kernelArgs, FFT_multi::shared_memory_size, streams[s % SM_count]);
-            cudaMemcpyAsync(acc_d_arr + s*2*NHalf, acc_CUDA + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, streams[s % SM_count]);
+            cudaMemcpyAsync(acc_d_arr + s*2*NHalf, acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, streams[s % SM_count]);
         }
     }
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
@@ -2449,8 +2445,8 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     /* Free memory */     
     cudaFreeHost(a_arr);
     cudaFreeHost(acc_d_arr);
-    cudaFree(a_CUDA);
-    cudaFree(acc_CUDA);
+    // cudaFree(a_CUDA);
+    // cudaFree(acc_CUDA);
 }
 
 };  // namespace lbcrypto
