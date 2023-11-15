@@ -81,6 +81,18 @@ public:
     }
 
     /**
+   * Main accumulator function used in bootstrapping - AP variant
+   *
+   * @param params a shared pointer to RingGSW scheme parameters
+   * @param &input input vector of ciphertexts
+   * @param acc previous value of the accumulator
+   */
+    virtual void EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, std::shared_ptr<std::vector<RLWECiphertext>> acc,
+                         const std::vector<NativeVector>& a) const {
+        OPENFHE_THROW(not_implemented_error, "ACC operation not supported");
+    }
+
+    /**
    * Takes an RLWE ciphertext input and outputs a vector of its digits, i.e., an
    * RLWE' ciphertext
    *

@@ -268,6 +268,115 @@ LWECiphertext BinFHEScheme::EvalFunc(const std::shared_ptr<BinFHECryptoParams> p
     return BootstrapFunc(params, EK, ct2, fLUT1, q);
 }
 
+std::vector<LWECiphertext>& BinFHEScheme::EvalFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
+                           std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT,
+                           const NativeInteger beta) const {
+    
+    if(ct.size() == 0){
+        std::string errMsg =
+            "ERROR: EvalFunc: input vector is empty";
+        OPENFHE_THROW(openfhe_error, errMsg);
+    }
+
+    std::vector<LWECiphertext> ct1(ct.size());
+    for (uint32_t count = 0; count < ct.size(); count++){
+        ct1[count] = std::make_shared<LWECiphertextImpl>(*ct[count]);
+    }
+
+    auto& LWEParams = params->GetLWEParams();
+
+    // Get what time of function it is
+    NativeInteger q           = ct[0]->GetModulus();
+    uint32_t functionProperty = checkInputFunction(LUT, q);
+
+    if (functionProperty == 0) {  // negacyclic function only needs one bootstrap
+        auto fLUT = [LUT](NativeInteger x, NativeInteger q, NativeInteger Q) -> NativeInteger {
+            return LUT[x.ConvertToInt()];
+        };
+        for (uint32_t count = 0; count < ct.size(); count++){
+            LWEscheme->EvalAddConstEq(ct[count], beta);
+        }
+        BootstrapFunc(params, EK, ct, fLUT, q);
+        return ct;
+    }
+    else if (functionProperty == 2) {  // arbitary funciton
+        uint32_t N = LWEParams->GetN();
+        if (q > N) {  // need q to be at most = N for arbitary function
+            std::string errMsg =
+                "ERROR: ciphertext modulus q needs to be <= ring dimension for arbitrary function evaluation";
+            OPENFHE_THROW(not_implemented_error, errMsg);
+        }
+        // repeat the LUT to make it periodic
+        std::vector<NativeInteger> LUT2 = LUT;
+        LUT2.insert(LUT2.end(), LUT.begin(), LUT.end());
+
+        NativeInteger dq = q << 1;
+        // raise the modulus of ct1 : q -> 2q
+        for (uint32_t count = 0; count < ct.size(); count++){
+            ct[count]->GetA().SetModulus(dq);
+            ct1[count]->GetA().SetModulus(dq);
+        }
+        for (uint32_t count = 0; count < ct.size(); count++){
+            LWEscheme->EvalAddConstEq(ct[count], beta);
+        }
+        // this is 1/4q_small or -1/4q_small mod q
+        auto f0 = [](NativeInteger x, NativeInteger q, NativeInteger Q) -> NativeInteger {
+            if (x < q / 2)
+                return Q - q / 4;
+            else
+                return q / 4;
+        };
+        BootstrapFunc(params, EK, ct, f0, dq);
+        for (uint32_t count = 0; count < ct.size(); count++){
+            LWEscheme->EvalSubEq2(ct1[count], ct[count]);
+            LWEscheme->EvalAddConstEq(ct[count], beta);
+            LWEscheme->EvalSubConstEq(ct[count], q >> 1);
+        }
+
+        // Now the input is within the range [0, q/2).
+        // Note that for non-periodic function, the input q is boosted up to 2q
+        auto fLUT2 = [LUT2](NativeInteger x, NativeInteger q, NativeInteger Q) -> NativeInteger {
+            if (x < q / 2)
+                return LUT2[x.ConvertToInt()];
+            else
+                return Q - LUT2[x.ConvertToInt() - q.ConvertToInt() / 2];
+        };
+        BootstrapFunc(params, EK, ct, fLUT2, dq);
+        for (uint32_t count = 0; count < ct.size(); count++){
+            ct[count]->SetModulus(q);
+        }
+        return ct;
+    }
+    // Else it's periodic function so we evaluate directly
+    for (uint32_t count = 0; count < ct.size(); count++){
+        LWEscheme->EvalAddConstEq(ct[count], beta);
+    }
+    // this is 1/4q_small or -1/4q_small mod q
+    auto f0 = [](NativeInteger x, NativeInteger q, NativeInteger Q) -> NativeInteger {
+        if (x < q / 2)
+            return Q - q / 4;
+        else
+            return q / 4;
+    };
+    BootstrapFunc(params, EK, ct, f0, q);
+    for (uint32_t count = 0; count < ct.size(); count++){
+        LWEscheme->EvalSubEq2(ct1[count], ct[count]);
+        LWEscheme->EvalAddConstEq(ct[count], beta);
+        LWEscheme->EvalSubConstEq(ct[count], q >> 2);
+    }
+
+    // Now the input is within the range [0, q/2).
+    // Note that for non-periodic function, the input q is boosted up to 2q
+    auto fLUT1 = [LUT](NativeInteger x, NativeInteger q, NativeInteger Q) -> NativeInteger {
+        if (x < q / 2)
+            return LUT[x.ConvertToInt()];
+        else
+            return Q - LUT[x.ConvertToInt() - q.ConvertToInt() / 2];
+    };
+    BootstrapFunc(params, EK, ct, fLUT1, q);
+    return ct;
+}
+
 // Evaluate Homomorphic Flooring
 LWECiphertext BinFHEScheme::EvalFloor(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                                       ConstLWECiphertext ct, const NativeInteger beta, uint32_t roundbits) const {
@@ -551,6 +660,85 @@ LWECiphertext BinFHEScheme::BootstrapFunc(const std::shared_ptr<BinFHECryptoPara
     auto ctKS = LWEscheme->KeySwitch(LWEParams, EK.KSkey, ctMS);
     // Modulus switching
     return LWEscheme->ModSwitch(fmod, ctKS);
+}
+
+template <typename Func>
+std::shared_ptr<std::vector<RLWECiphertext>> BinFHEScheme::BootstrapFuncCore(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWACCKey ek,
+                                               std::vector<LWECiphertext>& ct, const Func f, const NativeInteger fmod) const {
+    if (ek == nullptr) {
+        std::string errMsg =
+            "Bootstrapping keys have not been generated. Please call BTKeyGen before calling bootstrapping.";
+        OPENFHE_THROW(config_error, errMsg);
+    }
+
+    auto& LWEParams  = params->GetLWEParams();
+    auto& RGSWParams = params->GetRingGSWParams();
+    auto polyParams  = RGSWParams->GetPolyParams();
+
+    NativeInteger Q = LWEParams->GetQ();
+    uint32_t N      = LWEParams->GetN();
+
+    auto acc_vec = std::make_shared<std::vector<RLWECiphertext>> (ct.size());
+    std::vector<NativeVector> a (ct.size());
+
+    for (uint32_t count = 0; count < ct.size(); count++){
+        NativeVector m(N, Q);
+        // For specific function evaluation instead of general bootstrapping
+        NativeInteger ctMod    = ct[count]->GetModulus();
+        uint32_t factor        = (2 * N / ctMod.ConvertToInt());
+        const NativeInteger& b = ct[count]->GetB();
+        for (size_t j = 0; j < (ctMod >> 1); ++j) {
+            NativeInteger temp = b.ModSub(j, ctMod);
+            m[j * factor]      = Q.ConvertToInt() / fmod.ConvertToInt() * f(temp, ctMod, fmod);
+        }
+        std::vector<NativePoly> res(2);
+        // no need to do NTT as all coefficients of this poly are zero
+        res[0] = NativePoly(polyParams, Format::EVALUATION, true);
+        res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
+        res[1].SetValues(std::move(m), Format::COEFFICIENT);
+        res[1].SetFormat(Format::EVALUATION);
+
+        (*acc_vec)[count] = std::make_shared<RLWECiphertextImpl>(std::move(res));
+        a[count] = ct[count]->GetA();
+    }
+
+    // main accumulation computation
+    // the following loop is the bottleneck of bootstrapping/binary gate
+    // evaluation
+    ACCscheme->EvalAcc(RGSWParams, ek, acc_vec, a);
+    return acc_vec;
+}
+
+template <typename Func>
+void BinFHEScheme::BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
+                                          std::vector<LWECiphertext>& ct, const Func f, const NativeInteger fmod) const {
+
+    auto acc_vec = BootstrapFuncCore(params, EK.BSkey, ct, f, fmod);
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    for (uint32_t count = 0; count < ct.size(); count++){
+        std::vector<NativePoly>& accVec = (*acc_vec)[count]->GetElements();
+        // the accumulator result is encrypted w.r.t. the transposed secret key
+        // we can transpose "a" to get an encryption under the original secret key
+        accVec[0] = accVec[0].Transpose();
+        accVec[0].SetFormat(Format::COEFFICIENT);
+        accVec[1].SetFormat(Format::COEFFICIENT);
+
+        auto ctExt      = std::make_shared<LWECiphertextImpl>(std::move(accVec[0].GetValues()), std::move(accVec[1][0]));
+        auto& LWEParams = params->GetLWEParams();
+        // Modulus switching to a middle step Q'
+        auto ctMS = LWEscheme->ModSwitch(LWEParams->GetqKS(), ctExt);
+        // Key switching
+        auto ctKS = LWEscheme->KeySwitch(LWEParams, EK.KSkey, ctMS);
+        // Modulus switching
+        ct[count] = LWEscheme->ModSwitch(fmod, ctKS);
+        //ct[count] = LWEscheme->KeySwitch(LWEParams, EK.KSkey, ctExt);
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
+    std::cout << "BootstrapFunc postprocess time: " << elapsed.count() << " ms" << std::endl;
 }
 
 };  // namespace lbcrypto

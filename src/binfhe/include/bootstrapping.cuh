@@ -42,15 +42,15 @@ std::vector<GPUInfo> gpuInfoList;
 /* CUDA streams for parallel bootstrapping */
 std::vector<cudaStream_t> streams;
 
-/* Global memory variables */
-__device__ Complex_d* GINX_bootstrappingKey_CUDA;
-__device__ Complex_d* monomial_CUDA;
-__device__ Complex_d* twiddleTable_CUDA;
-__device__ Complex_d* ct_CUDA;
-__device__ Complex_d* dct_CUDA;
-__device__ uint64_t* params_CUDA;
-__device__ Complex_d* acc_CUDA;
-__device__ uint64_t* a_CUDA;
+/* Pointers point to GPU global memory */
+Complex_d* GINX_bootstrappingKey_CUDA;
+Complex_d* monomial_CUDA;
+Complex_d* twiddleTable_CUDA;
+Complex_d* ct_CUDA;
+Complex_d* dct_CUDA;
+uint64_t* params_CUDA;
+Complex_d* acc_CUDA;
+uint64_t* a_CUDA;
 
 /* Multiple small thread blocks mode bootstrapping */
 template<class FFT, class IFFT>
@@ -100,11 +100,11 @@ const std::map<syncKey, uint32_t> synchronizationMap({
     {{700, 512},    0},
     {{700, 1024},   0},
     {{700, 2048},   0},
-    {{800, 512},    0},
-    {{800, 1024},   0},
+    {{800, 512},    8},
+    {{800, 1024},  12},
     {{800, 2048},   0},
-    {{860, 512},    0},
-    {{860, 1024},   0},
+    {{860, 512},    8},
+    {{860, 1024},  12},
     {{860, 2048},   0},
     {{890, 512},    8},
     {{890, 1024},  12},

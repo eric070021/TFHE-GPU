@@ -2445,8 +2445,6 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     /* Free memory */     
     cudaFreeHost(a_arr);
     cudaFreeHost(acc_d_arr);
-    // cudaFree(a_CUDA);
-    // cudaFree(acc_CUDA);
 }
 
 };  // namespace lbcrypto

@@ -241,6 +241,15 @@ public:
     LWECiphertext EvalFunc(ConstLWECiphertext ct, const std::vector<NativeInteger>& LUT) const;
 
     /**
+   * Evaluate an arbitrary function
+   *
+   * @param &ct1 vector of ciphertexts to be bootstrapped
+   * @param LUT the look-up table of the to-be-evaluated function
+   * @return a shared pointer to the resulting ciphertext
+   */
+    std::vector<LWECiphertext>& EvalFunc(std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const;
+
+    /**
    * Generate the LUT for the to-be-evaluated function
    *
    * @param f the to-be-evaluated function

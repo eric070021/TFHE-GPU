@@ -71,6 +71,16 @@ public:
     void EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, RLWECiphertext& acc,
                  const NativeVector& a) const override;
 
+    /**
+   * Main accumulator function used in vector bootstrappings - AP variant
+   *
+   * @param params a shared pointer to RingGSW scheme parameters
+   * @param &input input vector of ciphertexts
+   * @param acc previous value of the accumulators
+   */
+    void EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, std::shared_ptr<std::vector<RLWECiphertext>> acc,
+                 const std::vector<NativeVector>& a) const override;
+
 private:
     RingGSWEvalKey KeyGenCGGI(const std::shared_ptr<RingGSWCryptoParams> params, const NativePoly& skNTT,
                               const LWEPlaintext& m) const;

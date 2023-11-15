@@ -135,6 +135,22 @@ public:
     LWECiphertext EvalFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                            ConstLWECiphertext ct, const std::vector<NativeInteger>& LUT,
                            const NativeInteger beta) const;
+    
+    /**
+   * Evaluate an arbitrary function
+   *
+   * @param params a shared pointer to RingGSW scheme parameters
+   * @param &EK a shared pointer to the bootstrapping keys
+   * @param &ct1 vector of input ciphertexts
+   * @param lwescheme a shared pointer to additive LWE scheme
+   * @param LUT the look-up table of the to-be-evaluated function
+   * @param beta the error bound
+   * @param bigger_q the ciphertext modulus
+   * @return a vector of the resulting ciphertexts
+   */
+    std::vector<LWECiphertext>& EvalFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
+                           std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT,
+                           const NativeInteger beta) const;
 
     /**
    * Evaluate a round down function
@@ -224,6 +240,33 @@ private:
     template <typename Func>
     LWECiphertext BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                                 ConstLWECiphertext ct, const Func f, const NativeInteger fmod) const;
+
+    /**
+   * Core bootstrapping operation
+   *
+   * @param params a shared pointer to RingGSW scheme parameters
+   * @param ek a shared pointer to the bootstrapping keys
+   * @param ct vector of input ciphertexts
+   * @param f function to evaluate in the functional bootstrapping
+   * @param fmod modulus over which the function is defined
+   * @return a shared pointer to the resulting vector of ciphertexts
+   */
+    template <typename Func>
+    std::shared_ptr<std::vector<RLWECiphertext>> BootstrapFuncCore(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWACCKey ek,
+                                     std::vector<LWECiphertext>& ct, const Func f, const NativeInteger fmod) const;
+
+   /**
+   * Bootstraps a fresh ciphertext
+   *
+   * @param params a shared pointer to RingGSW scheme parameters
+   * @param EK a shared pointer to the bootstrapping keys
+   * @param ct vector of input ciphertexts
+   * @param f function to evaluate in the functional bootstrapping
+   * @param fmod modulus over which the function is defined
+   */
+    template <typename Func>
+    void BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
+                                std::vector<LWECiphertext>& ct, const Func f, const NativeInteger fmod) const;
 
 protected:
     std::shared_ptr<LWEEncryptionScheme> LWEscheme = std::make_shared<LWEEncryptionScheme>();
