@@ -80,6 +80,17 @@ public:
    */
     void EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, std::shared_ptr<std::vector<RLWECiphertext>> acc,
                  const std::vector<NativeVector>& a) const override;
+    
+    /**
+   * Modswitch, Keyswitch, and Modswitch combo used after EvalAcc
+   *
+   * @param params a shared pointer to LWECryptoParams scheme parameters
+   * @param &input input vector of ciphertexts
+   * @param Q1 First modulus to switch to
+   * @param Q2 Second modulus to switch to
+   */
+    void MKMSwitch(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ct,
+                         NativeInteger Q1, NativeInteger Q2) const override;
 
 private:
     RingGSWEvalKey KeyGenCGGI(const std::shared_ptr<RingGSWCryptoParams> params, const NativePoly& skNTT,

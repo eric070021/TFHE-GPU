@@ -51,6 +51,7 @@ Complex_d* dct_CUDA;
 uint64_t* params_CUDA;
 Complex_d* acc_CUDA;
 uint64_t* a_CUDA;
+uint64_t* keySwitchingkey_CUDA;
 
 /* Multiple small thread blocks mode bootstrapping */
 template<class FFT, class IFFT>
@@ -64,6 +65,9 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
 template<class FFT>
 __global__ void cuFFTDxFWD(Complex_d* data, Complex_d* twiddleTable_CUDA);
 
+/* Modswitch, Keyswitch, and  Modswitch kernel*/
+__global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_CUDA, uint64_t *paramsMKM_CUDA);
+
 };  // namespace lbcrypto
 
 #endif
@@ -73,6 +77,7 @@ __global__ void cuFFTDxFWD(Complex_d* data, Complex_d* twiddleTable_CUDA);
 #include <map>
 #include <string>
 #include "rgsw-cryptoparameters.h"
+#include "lwe-cryptoparameters.h"
 #include "math/dftransform.h"
 
 #ifndef M_PI
@@ -117,10 +122,12 @@ const std::map<syncKey, uint32_t> synchronizationMap({
 /***************************************
 *  Preprocessing for GPU bootstrapping
 ****************************************/
-void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> GINX_bootstrappingKey_FFT,const std::shared_ptr<RingGSWCryptoParams> params);
+void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> GINX_bootstrappingKey_FFT, 
+    const std::shared_ptr<RingGSWCryptoParams> RGSWParams, LWESwitchingKey keySwitchingKey, const std::shared_ptr<LWECryptoParams> LWEParams);
 
 template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
-void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> GINX_bootstrappingKey_FFT,const std::shared_ptr<RingGSWCryptoParams> params);
+void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> GINX_bootstrappingKey_FFT, 
+    const std::shared_ptr<RingGSWCryptoParams> RGSWParams, LWESwitchingKey keySwitchingKey, const std::shared_ptr<LWECryptoParams> LWEParams);
 
 /***************************************
 *  ACC that support single ciphertext 
@@ -137,6 +144,12 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
 
 template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
 void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, std::vector<std::vector<std::vector<Complex>>>& acc_d, std::string mode);
+
+/***************************************
+*  Modswitch, Keyswitch, and Modswitch combo
+****************************************/
+void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ctExt,
+                         NativeInteger Q1, NativeInteger Q2);
 
 };  // namespace lbcrypto
 

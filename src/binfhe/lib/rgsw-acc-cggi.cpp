@@ -37,7 +37,7 @@
 namespace lbcrypto {
 
 // bootstrapping key for FFT-based accumulator
-std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> GINX_bootstrappingKey_FFT;
+//std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> GINX_bootstrappingKey_FFT;
 
 // Key generation as described in Section 4 of https://eprint.iacr.org/2014/816
 RingGSWACCKey RingGSWAccumulatorCGGI::KeyGenAcc(const std::shared_ptr<RingGSWCryptoParams> params,
@@ -76,20 +76,20 @@ RingGSWACCKey RingGSWAccumulatorCGGI::KeyGenAcc(const std::shared_ptr<RingGSWCry
         }
     }
 
-    // construct bootstrapping key for FFT-based accumulator
-    GINX_bootstrappingKey_FFT = std::make_shared<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>>();
-    (*GINX_bootstrappingKey_FFT).resize(1);
-    for (size_t i = 0; i < 1; ++i) {
-        (*GINX_bootstrappingKey_FFT)[i].resize(2);
-        for (size_t j = 0; j < 2; ++j) {
-            (*GINX_bootstrappingKey_FFT)[i][j].resize(n);
-        }
-    }
+    // // construct bootstrapping key for FFT-based accumulator
+    // GINX_bootstrappingKey_FFT = std::make_shared<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>>();
+    // (*GINX_bootstrappingKey_FFT).resize(1);
+    // for (size_t i = 0; i < 1; ++i) {
+    //     (*GINX_bootstrappingKey_FFT)[i].resize(2);
+    //     for (size_t j = 0; j < 2; ++j) {
+    //         (*GINX_bootstrappingKey_FFT)[i][j].resize(n);
+    //     }
+    // }
 
-    for (size_t i = 0; i < n; ++i) {
-        (*GINX_bootstrappingKey_FFT)[0][0][i] = KeyCopyCGGI_FFT(params, (*ek)[0][0][i]);
-        (*GINX_bootstrappingKey_FFT)[0][1][i] = KeyCopyCGGI_FFT(params, (*ek)[0][1][i]);
-    }
+    // for (size_t i = 0; i < n; ++i) {
+    //     (*GINX_bootstrappingKey_FFT)[0][0][i] = KeyCopyCGGI_FFT(params, (*ek)[0][0][i]);
+    //     (*GINX_bootstrappingKey_FFT)[0][1][i] = KeyCopyCGGI_FFT(params, (*ek)[0][1][i]);
+    // }
 
 //     // copy ek to GINX_bootstrappingKey_FFT
 //     NativeInteger Q   = params->GetQ();
@@ -135,7 +135,7 @@ RingGSWACCKey RingGSWAccumulatorCGGI::KeyGenAcc(const std::shared_ptr<RingGSWCry
 //     }
 
     /* Bring data on GPU */
-    GPUSetup(GINX_bootstrappingKey_FFT, params);
+    //GPUSetup(GINX_bootstrappingKey_FFT, params);
 
     return ek;
 }
@@ -241,8 +241,6 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
     // cast acc to BasicFloat
     for (uint32_t count = 0; count < acc->size(); count++){
         NativePoly acc0((*acc)[count]->GetElements()[0]), acc1((*acc)[count]->GetElements()[1]);
-        acc0.SetFormat(Format::COEFFICIENT);
-        acc1.SetFormat(Format::COEFFICIENT);
         std::vector<std::vector<Complex>> acc_d(2, std::vector<Complex>(N, Complex(0.0, 0.0)));
         for (size_t i = 0; i < N; ++i) {
             NativeInteger::SignedNativeInt d = (acc0[i] < QHalf) ? acc0[i].ConvertToInt() : (acc0[i].ConvertToInt() - Q_int);
@@ -252,10 +250,9 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
         }
     }
 
-   
     AddToAccCGGI_CUDA(params, a, acc_d_vec, "SINGLE");
 
-    //cast acc_d_vec to NativePoly
+    //cast acc_d_vec back to NativePoly
     for (uint32_t count = 0; count < acc->size(); count++){
         NativeVector ret0(N, Q), ret1(N, Q);
         for (size_t i = 0; i < N; ++i) {
@@ -267,10 +264,15 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
         res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
         res[0].SetValues(std::move(ret0), Format::COEFFICIENT);
         res[1].SetValues(std::move(ret1), Format::COEFFICIENT);
-        res[0].SetFormat(Format::EVALUATION);
-        res[1].SetFormat(Format::EVALUATION);
+
         (*acc)[count] = std::make_shared<RLWECiphertextImpl>(std::move(res));
     }
+}
+
+
+void RingGSWAccumulatorCGGI::MKMSwitch(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ctExt,
+                         NativeInteger Q1, NativeInteger Q2) const{
+    MKMSwitch_CUDA(params, ctExt, Q1, Q2);
 }
 
 // Encryption for the CGGI variant, as described in https://eprint.iacr.org/2020/086

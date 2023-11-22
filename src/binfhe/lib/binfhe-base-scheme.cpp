@@ -51,6 +51,9 @@ RingGSWBTKey BinFHEScheme::KeyGen(const std::shared_ptr<BinFHECryptoParams> para
 
     ek.BSkey = ACCscheme->KeyGenAcc(RGSWParams, skNPoly, LWEsk);
 
+    // bring the keys and parameters onto GPU
+    GPUsetup_wrapper(params, ek);
+
     return ek;
 }
 
@@ -92,7 +95,7 @@ LWECiphertext BinFHEScheme::EvalBinGate(const std::shared_ptr<BinFHECryptoParams
         std::vector<NativePoly>& accVec = acc->GetElements();
         // the accumulator result is encrypted w.r.t. the transposed secret key
         // we can transpose "a" to get an encryption under the original secret key
-        accVec[0] = accVec[0].Transpose();
+        //accVec[0] = accVec[0].Transpose();
         accVec[0].SetFormat(Format::COEFFICIENT);
         accVec[1].SetFormat(Format::COEFFICIENT);
 
@@ -124,7 +127,7 @@ LWECiphertext BinFHEScheme::Bootstrap(const std::shared_ptr<BinFHECryptoParams> 
     std::vector<NativePoly>& accVec = acc->GetElements();
     // the accumulator result is encrypted w.r.t. the transposed secret key
     // we can transpose "a" to get an encryption under the original secret key
-    accVec[0] = accVec[0].Transpose();
+    //accVec[0] = accVec[0].Transpose();
     accVec[0].SetFormat(Format::COEFFICIENT);
     accVec[1].SetFormat(Format::COEFFICIENT);
 
@@ -693,10 +696,9 @@ std::shared_ptr<std::vector<RLWECiphertext>> BinFHEScheme::BootstrapFuncCore(con
         }
         std::vector<NativePoly> res(2);
         // no need to do NTT as all coefficients of this poly are zero
-        res[0] = NativePoly(polyParams, Format::EVALUATION, true);
+        res[0] = NativePoly(polyParams, Format::COEFFICIENT, true);
         res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
         res[1].SetValues(std::move(m), Format::COEFFICIENT);
-        res[1].SetFormat(Format::EVALUATION);
 
         (*acc_vec)[count] = std::make_shared<RLWECiphertextImpl>(std::move(res));
         a[count] = ct[count]->GetA();
@@ -712,33 +714,83 @@ std::shared_ptr<std::vector<RLWECiphertext>> BinFHEScheme::BootstrapFuncCore(con
 template <typename Func>
 void BinFHEScheme::BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                                           std::vector<LWECiphertext>& ct, const Func f, const NativeInteger fmod) const {
-
+                                       
     auto acc_vec = BootstrapFuncCore(params, EK.BSkey, ct, f, fmod);
-
-    auto start = std::chrono::high_resolution_clock::now();
-
+    
+    // Extract RLWE to LWE
+    auto ctExt = std::make_shared<std::vector<LWECiphertext>> (ct.size());
     for (uint32_t count = 0; count < ct.size(); count++){
         std::vector<NativePoly>& accVec = (*acc_vec)[count]->GetElements();
-        // the accumulator result is encrypted w.r.t. the transposed secret key
-        // we can transpose "a" to get an encryption under the original secret key
-        accVec[0] = accVec[0].Transpose();
-        accVec[0].SetFormat(Format::COEFFICIENT);
-        accVec[1].SetFormat(Format::COEFFICIENT);
-
-        auto ctExt      = std::make_shared<LWECiphertextImpl>(std::move(accVec[0].GetValues()), std::move(accVec[1][0]));
-        auto& LWEParams = params->GetLWEParams();
-        // Modulus switching to a middle step Q'
-        auto ctMS = LWEscheme->ModSwitch(LWEParams->GetqKS(), ctExt);
-        // Key switching
-        auto ctKS = LWEscheme->KeySwitch(LWEParams, EK.KSkey, ctMS);
-        // Modulus switching
-        ct[count] = LWEscheme->ModSwitch(fmod, ctKS);
-        //ct[count] = LWEscheme->KeySwitch(LWEParams, EK.KSkey, ctExt);
+        (*ctExt)[count]      = std::make_shared<LWECiphertextImpl>(std::move(accVec[0].GetValues()), std::move(accVec[1][0]));
     }
 
-    auto end = std::chrono::high_resolution_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
-    std::cout << "BootstrapFunc postprocess time: " << elapsed.count() << " ms" << std::endl;
+    auto& LWEParams = params->GetLWEParams();
+    ACCscheme->MKMSwitch(LWEParams, ctExt, LWEParams->GetqKS(), fmod);
+
+    for (uint32_t count = 0; count < ct.size(); count++){
+        ct[count] = (*ctExt)[count];
+    }
+}
+
+void BinFHEScheme::GPUsetup_wrapper(const std::shared_ptr<BinFHECryptoParams> params, RingGSWBTKey ek) 
+        const {
+
+    auto& LWEParams    = params->GetLWEParams();
+    auto& RGSWParams   = params->GetRingGSWParams();
+
+    uint32_t n      = LWEParams->Getn();
+
+    // construct bootstrapping key for FFT-based accumulator
+    auto GINX_bootstrappingKey_FFT = std::make_shared<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>>();
+    (*GINX_bootstrappingKey_FFT).resize(1);
+    for (size_t i = 0; i < 1; ++i) {
+        (*GINX_bootstrappingKey_FFT)[i].resize(2);
+        for (size_t j = 0; j < 2; ++j) {
+            (*GINX_bootstrappingKey_FFT)[i][j].resize(n);
+        }
+    }
+
+    for (size_t i = 0; i < n; ++i) {
+        (*GINX_bootstrappingKey_FFT)[0][0][i] = KeyCopy_FFT(RGSWParams, (*ek.BSkey)[0][0][i]);
+        (*GINX_bootstrappingKey_FFT)[0][1][i] = KeyCopy_FFT(RGSWParams, (*ek.BSkey)[0][1][i]);
+    }
+    
+    /* Bring data on GPU */
+    GPUSetup(GINX_bootstrappingKey_FFT, RGSWParams, ek.KSkey, LWEParams);
+}
+
+std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> BinFHEScheme::KeyCopy_FFT(const std::shared_ptr<RingGSWCryptoParams> params, 
+    RingGSWEvalKey ek) const{
+
+    NativeInteger Q   = params->GetQ();
+    NativeInteger QHalf = Q >> 1;
+    NativeInteger::SignedNativeInt Q_int = Q.ConvertToInt();
+    uint32_t digitsG  = params->GetDigitsG();
+    uint32_t digitsG2 = digitsG << 1;
+    uint32_t N        = params->GetN();
+
+    auto ek_d = std::make_shared<std::vector<std::vector<std::vector<Complex>>>>
+        (digitsG2, std::vector<std::vector<Complex>>(2, std::vector<Complex>(N, Complex(0.0, 0.0))));
+
+    for (size_t j = 0; j < digitsG2; ++j) {
+        for (size_t k = 0; k < 2; ++k) {
+            NativePoly ek_t = (*ek)[j][k];
+            ek_t.SetFormat(Format::COEFFICIENT);
+            for (size_t l = 0; l < N; ++l) {
+                NativeInteger::SignedNativeInt d = (ek_t[l] < QHalf) ? ek_t[l].ConvertToInt() : (ek_t[l].ConvertToInt() - Q_int);
+                (*ek_d)[j][k][l].real(static_cast<BasicFloat>(d));
+            }
+        }
+    }
+
+    // transform to evaluation domain
+    for (size_t i = 0; i < digitsG2; ++i) {
+        for (size_t j = 0; j < 2; ++j) {
+            DiscreteFourierTransform::NegacyclicForwardTransform((*ek_d)[i][j]);
+        }
+    }
+
+    return ek_d;
 }
 
 };  // namespace lbcrypto

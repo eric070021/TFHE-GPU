@@ -39,6 +39,7 @@
 #include "rgsw-acc.h"
 #include "rgsw-acc-dm.h"
 #include "rgsw-acc-cggi.h"
+#include "math/dftransform.h"
 
 #include <map>
 #include <vector>
@@ -267,6 +268,22 @@ private:
     template <typename Func>
     void BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                                 std::vector<LWECiphertext>& ct, const Func f, const NativeInteger fmod) const;
+
+    /**
+   * GPU setup wrapper
+   *
+   * @param params a shared pointer to BinFHECryptoParams scheme parameters
+   * @param ek Bootstrapping key and keyswitching key
+   */
+    void GPUsetup_wrapper(const std::shared_ptr<BinFHECryptoParams> params, RingGSWBTKey ek) const;
+
+    /**
+   * Copy NTT bootstrapping key to FFT format
+   *
+   * @param params a shared pointer to RingGSWCryptoParams scheme parameters
+   * @param ek Bootstrapping key
+   */
+    std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> KeyCopy_FFT(const std::shared_ptr<RingGSWCryptoParams> params, RingGSWEvalKey ek) const;
 
 protected:
     std::shared_ptr<LWEEncryptionScheme> LWEscheme = std::make_shared<LWEEncryptionScheme>();
