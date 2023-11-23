@@ -247,7 +247,7 @@ public:
    * @param LUT the look-up table of the to-be-evaluated function
    * @return a shared pointer to the resulting ciphertext
    */
-    std::vector<LWECiphertext>& EvalFunc(std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const;
+    std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const;
 
     /**
    * Generate the LUT for the to-be-evaluated function

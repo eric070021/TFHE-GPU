@@ -2584,7 +2584,7 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    std::cout << bootstrap_num << " Bootstrapping GPU time : " << milliseconds << " ms\n";
+    //std::cout << bootstrap_num << " Bootstrapping GPU time : " << milliseconds << " ms\n";
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 
@@ -2665,7 +2665,7 @@ void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_p
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    std::cout << bootstrap_num << " MKMSwitching GPU time : " << milliseconds << " ms\n";
+    //std::cout << bootstrap_num << " MKMSwitching GPU time : " << milliseconds << " ms\n";
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 

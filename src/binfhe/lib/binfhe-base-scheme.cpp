@@ -271,8 +271,8 @@ LWECiphertext BinFHEScheme::EvalFunc(const std::shared_ptr<BinFHECryptoParams> p
     return BootstrapFunc(params, EK, ct2, fLUT1, q);
 }
 
-std::vector<LWECiphertext>& BinFHEScheme::EvalFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
-                           std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT,
+std::shared_ptr<std::vector<LWECiphertext>> BinFHEScheme::EvalFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
+                           const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT,
                            const NativeInteger beta) const {
     
     if(ct.size() == 0){
@@ -297,10 +297,9 @@ std::vector<LWECiphertext>& BinFHEScheme::EvalFunc(const std::shared_ptr<BinFHEC
             return LUT[x.ConvertToInt()];
         };
         for (uint32_t count = 0; count < ct.size(); count++){
-            LWEscheme->EvalAddConstEq(ct[count], beta);
+            LWEscheme->EvalAddConstEq(ct1[count], beta);
         }
-        BootstrapFunc(params, EK, ct, fLUT, q);
-        return ct;
+        return BootstrapFunc(params, EK, ct1, fLUT, q);
     }
     else if (functionProperty == 2) {  // arbitary funciton
         uint32_t N = LWEParams->GetN();
@@ -315,13 +314,16 @@ std::vector<LWECiphertext>& BinFHEScheme::EvalFunc(const std::shared_ptr<BinFHEC
 
         NativeInteger dq = q << 1;
         // raise the modulus of ct1 : q -> 2q
-        for (uint32_t count = 0; count < ct.size(); count++){
-            ct[count]->GetA().SetModulus(dq);
+        for (uint32_t count = 0; count < ct.size(); count++)
             ct1[count]->GetA().SetModulus(dq);
-        }
-        for (uint32_t count = 0; count < ct.size(); count++){
-            LWEscheme->EvalAddConstEq(ct[count], beta);
-        }
+
+        std::vector<LWECiphertext> ct2(ct.size());
+        for (uint32_t count = 0; count < ct.size(); count++)
+            ct2[count] = std::make_shared<LWECiphertextImpl>(*ct1[count]);
+
+        for (uint32_t count = 0; count < ct.size(); count++)
+            LWEscheme->EvalAddConstEq(ct2[count], beta);
+
         // this is 1/4q_small or -1/4q_small mod q
         auto f0 = [](NativeInteger x, NativeInteger q, NativeInteger Q) -> NativeInteger {
             if (x < q / 2)
@@ -329,11 +331,11 @@ std::vector<LWECiphertext>& BinFHEScheme::EvalFunc(const std::shared_ptr<BinFHEC
             else
                 return q / 4;
         };
-        BootstrapFunc(params, EK, ct, f0, dq);
+        auto ct3 = BootstrapFunc(params, EK, ct2, f0, dq);
         for (uint32_t count = 0; count < ct.size(); count++){
-            LWEscheme->EvalSubEq2(ct1[count], ct[count]);
-            LWEscheme->EvalAddConstEq(ct[count], beta);
-            LWEscheme->EvalSubConstEq(ct[count], q >> 1);
+            LWEscheme->EvalSubEq2(ct1[count], (*ct3)[count]);
+            LWEscheme->EvalAddConstEq((*ct3)[count], beta);
+            LWEscheme->EvalSubConstEq((*ct3)[count], q >> 1);
         }
 
         // Now the input is within the range [0, q/2).
@@ -344,15 +346,15 @@ std::vector<LWECiphertext>& BinFHEScheme::EvalFunc(const std::shared_ptr<BinFHEC
             else
                 return Q - LUT2[x.ConvertToInt() - q.ConvertToInt() / 2];
         };
-        BootstrapFunc(params, EK, ct, fLUT2, dq);
-        for (uint32_t count = 0; count < ct.size(); count++){
-            ct[count]->SetModulus(q);
+        auto ct4 = BootstrapFunc(params, EK, (*ct3), fLUT2, dq);
+        for (uint32_t count = 0; count < ct3->size(); count++){
+            (*ct4)[count]->SetModulus(q);
         }
-        return ct;
+        return ct4;
     }
     // Else it's periodic function so we evaluate directly
     for (uint32_t count = 0; count < ct.size(); count++){
-        LWEscheme->EvalAddConstEq(ct[count], beta);
+        LWEscheme->EvalAddConstEq(ct1[count], beta);
     }
     // this is 1/4q_small or -1/4q_small mod q
     auto f0 = [](NativeInteger x, NativeInteger q, NativeInteger Q) -> NativeInteger {
@@ -361,11 +363,11 @@ std::vector<LWECiphertext>& BinFHEScheme::EvalFunc(const std::shared_ptr<BinFHEC
         else
             return q / 4;
     };
-    BootstrapFunc(params, EK, ct, f0, q);
+    auto ct2 = BootstrapFunc(params, EK, ct1, f0, q);
     for (uint32_t count = 0; count < ct.size(); count++){
-        LWEscheme->EvalSubEq2(ct1[count], ct[count]);
-        LWEscheme->EvalAddConstEq(ct[count], beta);
-        LWEscheme->EvalSubConstEq(ct[count], q >> 2);
+        LWEscheme->EvalSubEq2(ct[count], (*ct2)[count]);
+        LWEscheme->EvalAddConstEq((*ct2)[count], beta);
+        LWEscheme->EvalSubConstEq((*ct2)[count], q >> 2);
     }
 
     // Now the input is within the range [0, q/2).
@@ -376,8 +378,7 @@ std::vector<LWECiphertext>& BinFHEScheme::EvalFunc(const std::shared_ptr<BinFHEC
         else
             return Q - LUT[x.ConvertToInt() - q.ConvertToInt() / 2];
     };
-    BootstrapFunc(params, EK, ct, fLUT1, q);
-    return ct;
+    return BootstrapFunc(params, EK, (*ct2), fLUT1, q);
 }
 
 // Evaluate Homomorphic Flooring
@@ -712,7 +713,7 @@ std::shared_ptr<std::vector<RLWECiphertext>> BinFHEScheme::BootstrapFuncCore(con
 }
 
 template <typename Func>
-void BinFHEScheme::BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
+std::shared_ptr<std::vector<LWECiphertext>> BinFHEScheme::BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                                           std::vector<LWECiphertext>& ct, const Func f, const NativeInteger fmod) const {
                                        
     auto acc_vec = BootstrapFuncCore(params, EK.BSkey, ct, f, fmod);
@@ -727,9 +728,10 @@ void BinFHEScheme::BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> param
     auto& LWEParams = params->GetLWEParams();
     ACCscheme->MKMSwitch(LWEParams, ctExt, LWEParams->GetqKS(), fmod);
 
-    for (uint32_t count = 0; count < ct.size(); count++){
-        ct[count] = (*ctExt)[count];
-    }
+    // for (uint32_t count = 0; count < ct.size(); count++){
+    //     ct[count] = (*ctExt)[count];
+    // }
+    return ctExt;
 }
 
 void BinFHEScheme::GPUsetup_wrapper(const std::shared_ptr<BinFHECryptoParams> params, RingGSWBTKey ek) 

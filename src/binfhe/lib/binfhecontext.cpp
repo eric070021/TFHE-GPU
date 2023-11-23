@@ -259,9 +259,9 @@ LWECiphertext BinFHEContext::EvalFunc(ConstLWECiphertext ct, const std::vector<N
     return m_binfhescheme->EvalFunc(m_params, m_BTKey, ct, LUT, beta);
 }
 
-std::vector<LWECiphertext>& BinFHEContext::EvalFunc(std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const {
+std::vector<LWECiphertext> BinFHEContext::EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const {
     NativeInteger beta = GetBeta();
-    return m_binfhescheme->EvalFunc(m_params, m_BTKey, ct, LUT, beta);
+    return (*m_binfhescheme->EvalFunc(m_params, m_BTKey, ct, LUT, beta));
 }
 
 LWECiphertext BinFHEContext::EvalFloor(ConstLWECiphertext ct, uint32_t roundbits) const {

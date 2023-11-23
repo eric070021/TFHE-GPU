@@ -149,8 +149,8 @@ public:
    * @param bigger_q the ciphertext modulus
    * @return a vector of the resulting ciphertexts
    */
-    std::vector<LWECiphertext>& EvalFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
-                           std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT,
+    std::shared_ptr<std::vector<LWECiphertext>> EvalFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
+                           const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT,
                            const NativeInteger beta) const;
 
     /**
@@ -266,7 +266,7 @@ private:
    * @param fmod modulus over which the function is defined
    */
     template <typename Func>
-    void BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
+    std::shared_ptr<std::vector<LWECiphertext>> BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                                 std::vector<LWECiphertext>& ct, const Func f, const NativeInteger fmod) const;
 
     /**

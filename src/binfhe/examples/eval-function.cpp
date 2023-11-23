@@ -107,6 +107,28 @@ int main() {
         std::cout << "Input: " << i << ". Expected: " << fp(i, p) << 
             ". Evaluated = " << result << std::endl;
     }
+
+    // for(int round = 1; round <= 512; round++){
+    //     std::vector<LWECiphertext> ct_vec;
+    //     for (int i = 0; i < round; i++) {
+    //         auto ct1 = cc.Encrypt(sk, i % p, FRESH, p);
+    //         ct_vec.push_back(ct1);
+    //     }
+    //     // warm up
+    //     auto ct_cube_vec = cc.EvalFunc(ct_vec, lut);
+        
+    //     // Get average of 10 runs
+    //     std::vector<double> times;
+    //     for(int i = 0; i < 10; i++){
+    //         auto start = std::chrono::high_resolution_clock::now();
+    //         ct_cube_vec = cc.EvalFunc(ct_vec, lut);
+    //         auto end = std::chrono::high_resolution_clock::now();
+    //         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
+    //         times.push_back(elapsed.count());
+    //     }
+       
+    //     std::cout << std::accumulate(times.begin(), times.end(), 0.0) / times.size() << ", ";
+    // }
     
     // auto start = std::chrono::high_resolution_clock::now(); 
     // int failCount = 0;
