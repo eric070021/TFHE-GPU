@@ -298,67 +298,79 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
         /* ACC times Bootstrapping key and monomial */
         /* multiply with ek0 */
         // polynomial a
-        #pragma unroll
         for (uint32_t i = gtid; i < NHalf; i += gdim){
             ct_CUDA[i] = make_cuDoubleComplex(0, 0);
-            #pragma unroll
             for (uint32_t l = 0; l < digitsG2; ++l){
-                ct_CUDA[i] = cuCadd(ct_CUDA[i], cuCmul(dct_CUDA[l*NHalf + i], GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i]));
+                ct_CUDA[i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].x, ct_CUDA[i].x);
+                ct_CUDA[i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].y, ct_CUDA[i].x);
+                ct_CUDA[i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].y, ct_CUDA[i].y);
+                ct_CUDA[i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].x, ct_CUDA[i].y);
             }
         }
         // polynomial b
-        #pragma unroll
         for (uint32_t i = gtid; i < NHalf; i += gdim){
-            ct_CUDA[NHalf + i] = make_cuDoubleComplex(0, 0);
-            #pragma unroll
+            ct_CUDA[NHalf + i] = make_cuDoubleComplex(0.0, 0.0);
             for (uint32_t l = 0; l < digitsG2; ++l){
-                ct_CUDA[NHalf + i] = cuCadd(ct_CUDA[NHalf + i], cuCmul(dct_CUDA[l*NHalf + i], GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i]));
+                ct_CUDA[NHalf + i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, ct_CUDA[NHalf + i].x);
+                ct_CUDA[NHalf + i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, ct_CUDA[NHalf + i].x);
+                ct_CUDA[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, ct_CUDA[NHalf + i].y);
+                ct_CUDA[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, ct_CUDA[NHalf + i].y);
             }
         }
         grid.sync();
-
         /* multiply with postive monomial */
         // polynomial a
-        #pragma unroll
         for (uint32_t i = gtid; i < NHalf; i += gdim){
-            acc_CUDA[i] = cuCadd(acc_CUDA[i], cuCmul(ct_CUDA[i], monomial_CUDA[indexPos*NHalf + i]));
+            acc_CUDA[i].x = fma(ct_CUDA[i].x, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[i].x);
+            acc_CUDA[i].x = fma(-ct_CUDA[i].y, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[i].x);
+            acc_CUDA[i].y = fma(ct_CUDA[i].x, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[i].y);
+            acc_CUDA[i].y = fma(ct_CUDA[i].y, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[i].y);
         }
         // polynomial b
-        #pragma unroll
         for (uint32_t i = gtid; i < NHalf; i += gdim){
-            acc_CUDA[NHalf + i] = cuCadd(acc_CUDA[NHalf + i], cuCmul(ct_CUDA[NHalf + i], monomial_CUDA[indexPos*NHalf + i]));
+            acc_CUDA[NHalf + i].x = fma(ct_CUDA[NHalf + i].x, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[NHalf + i].x);
+            acc_CUDA[NHalf + i].x = fma(-ct_CUDA[NHalf + i].y, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[NHalf + i].x);
+            acc_CUDA[NHalf + i].y = fma(ct_CUDA[NHalf + i].x, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[NHalf + i].y);
+            acc_CUDA[NHalf + i].y = fma(ct_CUDA[NHalf + i].y, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[NHalf + i].y);
         }        
         grid.sync();
 
         /* multiply with ek1 */
         // polynomial a
-        #pragma unroll
         for (uint32_t i = gtid; i < NHalf; i += gdim){
             ct_CUDA[i] = make_cuDoubleComplex(0, 0);
-            #pragma unroll
-            for (uint32_t l = 0; l < digitsG2; ++l)
-                ct_CUDA[i] = cuCadd(ct_CUDA[i], cuCmul(dct_CUDA[l*NHalf + i], GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i]));
+            for (uint32_t l = 0; l < digitsG2; ++l){
+                ct_CUDA[i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].x, ct_CUDA[i].x);
+                ct_CUDA[i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].y, ct_CUDA[i].x);
+                ct_CUDA[i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].y, ct_CUDA[i].y);
+                ct_CUDA[i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].x, ct_CUDA[i].y);
+            }
         }
         // polynomial b
-        #pragma unroll
         for (uint32_t i = gtid; i < NHalf; i += gdim){
-            ct_CUDA[NHalf + i] = make_cuDoubleComplex(0, 0);
-            #pragma unroll
-            for (uint32_t l = 0; l < digitsG2; ++l)
-                ct_CUDA[NHalf + i] = cuCadd(ct_CUDA[NHalf + i], cuCmul(dct_CUDA[l*NHalf + i], GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i]));
+            ct_CUDA[NHalf + i] = make_cuDoubleComplex(0.0, 0.0);
+            for (uint32_t l = 0; l < digitsG2; ++l){
+                ct_CUDA[NHalf + i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, ct_CUDA[NHalf + i].x);
+                ct_CUDA[NHalf + i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, ct_CUDA[NHalf + i].x);
+                ct_CUDA[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, ct_CUDA[NHalf + i].y);
+                ct_CUDA[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, ct_CUDA[NHalf + i].y);
+            }
         }
         grid.sync();
-        
         /* multiply with negative monomial */
         // polynomial a
-        #pragma unroll
         for (uint32_t i = gtid; i < NHalf; i += gdim){
-            acc_CUDA[i] = cuCadd(acc_CUDA[i], cuCmul(ct_CUDA[i], monomial_CUDA[indexNeg*NHalf + i]));
+            acc_CUDA[i].x = fma(ct_CUDA[i].x, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[i].x);
+            acc_CUDA[i].x = fma(-ct_CUDA[i].y, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[i].x);
+            acc_CUDA[i].y = fma(ct_CUDA[i].x, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[i].y);
+            acc_CUDA[i].y = fma(ct_CUDA[i].y, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[i].y);
         }
         // polynomial b
-        #pragma unroll
         for (uint32_t i = gtid; i < NHalf; i += gdim){
-            acc_CUDA[NHalf + i] = cuCadd(acc_CUDA[NHalf + i], cuCmul(ct_CUDA[NHalf + i], monomial_CUDA[indexNeg*NHalf + i]));
+            acc_CUDA[NHalf + i].x = fma(ct_CUDA[NHalf + i].x, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[NHalf + i].x);
+            acc_CUDA[NHalf + i].x = fma(-ct_CUDA[NHalf + i].y, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[NHalf + i].x);
+            acc_CUDA[NHalf + i].y = fma(ct_CUDA[NHalf + i].x, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[NHalf + i].y);
+            acc_CUDA[NHalf + i].y = fma(ct_CUDA[NHalf + i].y, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[NHalf + i].y);
         }        
         grid.sync();
     }
@@ -644,67 +656,79 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
         /* ACC times Bootstrapping key and monomial */
         /* multiply with ek0 */
         // polynomial a
-        #pragma unroll
         for (uint32_t i = tid; i < NHalf; i += bdim){
-            ct_CUDA[i] = make_cuDoubleComplex(0, 0);
-            #pragma unroll
+            shared_mem[i] = complex_type(0.0, 0.0);
             for (uint32_t l = 0; l < digitsG2; ++l){
-                ct_CUDA[i] = cuCadd(ct_CUDA[i], cuCmul(dct_CUDA[l*NHalf + i], GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i]));
+                shared_mem[i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].x, shared_mem[i].x);
+                shared_mem[i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].y, shared_mem[i].x);
+                shared_mem[i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].y, shared_mem[i].y);
+                shared_mem[i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].x, shared_mem[i].y);
             }
         }
         // polynomial b
-        #pragma unroll
         for (uint32_t i = tid; i < NHalf; i += bdim){
-            ct_CUDA[NHalf + i] = make_cuDoubleComplex(0, 0);
-            #pragma unroll
+            shared_mem[NHalf + i] = complex_type(0.0, 0.0);
             for (uint32_t l = 0; l < digitsG2; ++l){
-                ct_CUDA[NHalf + i] = cuCadd(ct_CUDA[NHalf + i], cuCmul(dct_CUDA[l*NHalf + i], GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i]));
+                shared_mem[NHalf + i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, shared_mem[NHalf + i].x);
+                shared_mem[NHalf + i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, shared_mem[NHalf + i].x);
+                shared_mem[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, shared_mem[NHalf + i].y);
+                shared_mem[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, shared_mem[NHalf + i].y);
             }
         }
         __syncthreads();
-
         /* multiply with postive monomial */
         // polynomial a
-        #pragma unroll
         for (uint32_t i = tid; i < NHalf; i += bdim){
-            acc_CUDA[i] = cuCadd(acc_CUDA[i], cuCmul(ct_CUDA[i], monomial_CUDA[indexPos*NHalf + i]));
+            acc_CUDA[i].x = fma(shared_mem[i].x, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[i].x);
+            acc_CUDA[i].x = fma(-shared_mem[i].y, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[i].x);
+            acc_CUDA[i].y = fma(shared_mem[i].x, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[i].y);
+            acc_CUDA[i].y = fma(shared_mem[i].y, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[i].y);
         }
         // polynomial b
-        #pragma unroll
         for (uint32_t i = tid; i < NHalf; i += bdim){
-            acc_CUDA[NHalf + i] = cuCadd(acc_CUDA[NHalf + i], cuCmul(ct_CUDA[NHalf + i], monomial_CUDA[indexPos*NHalf + i]));
+            acc_CUDA[NHalf + i].x = fma(shared_mem[NHalf + i].x, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[NHalf + i].x);
+            acc_CUDA[NHalf + i].x = fma(-shared_mem[NHalf + i].y, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[NHalf + i].x);
+            acc_CUDA[NHalf + i].y = fma(shared_mem[NHalf + i].x, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[NHalf + i].y);
+            acc_CUDA[NHalf + i].y = fma(shared_mem[NHalf + i].y, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[NHalf + i].y);
         }        
         __syncthreads();
 
         /* multiply with ek1 */
         // polynomial a
-        #pragma unroll
         for (uint32_t i = tid; i < NHalf; i += bdim){
-            ct_CUDA[i] = make_cuDoubleComplex(0, 0);
-            #pragma unroll
-            for (uint32_t l = 0; l < digitsG2; ++l)
-                ct_CUDA[i] = cuCadd(ct_CUDA[i], cuCmul(dct_CUDA[l*NHalf + i], GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i]));
+            shared_mem[i] = complex_type(0.0, 0.0);
+            for (uint32_t l = 0; l < digitsG2; ++l){
+                shared_mem[i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].x, shared_mem[i].x);
+                shared_mem[i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].y, shared_mem[i].x);
+                shared_mem[i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].y, shared_mem[i].y);
+                shared_mem[i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].x, shared_mem[i].y);
+            }
         }
         // polynomial b
-        #pragma unroll
         for (uint32_t i = tid; i < NHalf; i += bdim){
-            ct_CUDA[NHalf + i] = make_cuDoubleComplex(0, 0);
-            #pragma unroll
-            for (uint32_t l = 0; l < digitsG2; ++l)
-                ct_CUDA[NHalf + i] = cuCadd(ct_CUDA[NHalf + i], cuCmul(dct_CUDA[l*NHalf + i], GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i]));
+            shared_mem[NHalf + i] = complex_type(0.0, 0.0);
+            for (uint32_t l = 0; l < digitsG2; ++l){
+                shared_mem[NHalf + i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, shared_mem[NHalf + i].x);
+                shared_mem[NHalf + i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, shared_mem[NHalf + i].x);
+                shared_mem[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, shared_mem[NHalf + i].y);
+                shared_mem[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, shared_mem[NHalf + i].y);
+            }
         }
         __syncthreads();
-        
         /* multiply with negative monomial */
         // polynomial a
-        #pragma unroll
         for (uint32_t i = tid; i < NHalf; i += bdim){
-            acc_CUDA[i] = cuCadd(acc_CUDA[i], cuCmul(ct_CUDA[i], monomial_CUDA[indexNeg*NHalf + i]));
+            acc_CUDA[i].x = fma(shared_mem[i].x, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[i].x);
+            acc_CUDA[i].x = fma(-shared_mem[i].y, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[i].x);
+            acc_CUDA[i].y = fma(shared_mem[i].x, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[i].y);
+            acc_CUDA[i].y = fma(shared_mem[i].y, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[i].y);
         }
         // polynomial b
-        #pragma unroll
         for (uint32_t i = tid; i < NHalf; i += bdim){
-            acc_CUDA[NHalf + i] = cuCadd(acc_CUDA[NHalf + i], cuCmul(ct_CUDA[NHalf + i], monomial_CUDA[indexNeg*NHalf + i]));
+            acc_CUDA[NHalf + i].x = fma(shared_mem[NHalf + i].x, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[NHalf + i].x);
+            acc_CUDA[NHalf + i].x = fma(-shared_mem[NHalf + i].y, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[NHalf + i].x);
+            acc_CUDA[NHalf + i].y = fma(shared_mem[NHalf + i].x, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[NHalf + i].y);
+            acc_CUDA[NHalf + i].y = fma(shared_mem[NHalf + i].y, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[NHalf + i].y);
         }        
         __syncthreads();
     }
@@ -1342,8 +1366,8 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributeMaxDynamicSharedMemorySize, (n + 1) * sizeof(uint64_t));
 
     // cuFFTDx Forward shared memory size
-    cudaFuncSetAttribute(cuFFTDxFWD<FFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 64);
-    cudaFuncSetAttribute(cuFFTDxFWD<FFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_fwd::shared_memory_size);
+    cudaFuncSetAttribute(cuFFTDxFWD<FFT_fwd>, cudaFuncAttributePreferredSharedMemoryCarveout, 64);
+    cudaFuncSetAttribute(cuFFTDxFWD<FFT_fwd>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_fwd::shared_memory_size);
 
     /* Initialize twiddle table */
     Complex *twiddleTable;
@@ -2584,7 +2608,7 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    //std::cout << bootstrap_num << " Bootstrapping GPU time : " << milliseconds << " ms\n";
+    std::cout << bootstrap_num << " Bootstrapping GPU time : " << milliseconds << " ms\n";
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 
@@ -2665,7 +2689,7 @@ void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_p
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    //std::cout << bootstrap_num << " MKMSwitching GPU time : " << milliseconds << " ms\n";
+    std::cout << bootstrap_num << " MKMSwitching GPU time : " << milliseconds << " ms\n";
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 

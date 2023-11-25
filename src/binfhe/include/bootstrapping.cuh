@@ -102,8 +102,8 @@ struct syncKey {
 /* Map used in Single block mode */
 const std::map<syncKey, uint32_t> synchronizationMap({
   // arch | dim | syncNum
-    {{700, 512},    0},
-    {{700, 1024},   0},
+    {{700, 512},    8},
+    {{700, 1024},  12},
     {{700, 2048},   0},
     {{800, 512},    8},
     {{800, 1024},  12},

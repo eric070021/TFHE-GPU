@@ -104,8 +104,7 @@ int main() {
     for (int i = 0; i < p; i++) {
         LWEPlaintext result;
         cc.Decrypt(sk, ct_cube_vec[i], &result, p);
-        std::cout << "Input: " << i << ". Expected: " << fp(i, p) << 
-            ". Evaluated = " << result << std::endl;
+        std::cout << "Input: " << i << ". Expected: " << fp(i, p) << ". Evaluated = " << result << std::endl;
     }
 
     // for(int round = 1; round <= 512; round++){
