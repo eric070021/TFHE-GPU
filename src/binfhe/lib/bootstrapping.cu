@@ -32,57 +32,45 @@ __global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_
     uint32_t bdim = ThisBlockSize();
 
     /* HE Parameters Set */
-    uint64_t n              = paramsMKM_CUDA[0];
-    uint64_t N              = paramsMKM_CUDA[1];
-    uint64_t Q              = paramsMKM_CUDA[3];
-    uint64_t baseKS         = paramsMKM_CUDA[4];
-    uint64_t digitCountKS   = paramsMKM_CUDA[5];
-    uint64_t Q1             = paramsMKM_CUDA[6];
-    uint64_t Q2             = paramsMKM_CUDA[7];
+    const uint32_t n              = static_cast<uint32_t>(paramsMKM_CUDA[0]);
+    const uint32_t N              = static_cast<uint32_t>(paramsMKM_CUDA[1]);
+    const uint64_t Q              = paramsMKM_CUDA[3];
+    const uint32_t baseKS         = static_cast<uint32_t>(paramsMKM_CUDA[4]);
+    const uint32_t digitCountKS   = static_cast<uint32_t>(paramsMKM_CUDA[5]);
+    const uint64_t Q1             = paramsMKM_CUDA[6];
+    const uint64_t Q2             = paramsMKM_CUDA[7];
+
+    /* Shared memory */
+    extern __shared__ uint64_t ct_shared[];
+    for(uint32_t i = tid; i <= N; i += bdim){
+        ct_shared[i] = ctExt_CUDA[i];
+    }
+    __syncthreads();
 
     /* First Modswitch */
     for (size_t i = tid; i <= N; i += bdim)
-        ctExt_CUDA[i] = RoundqQ_CUDA(ctExt_CUDA[i], Q1, Q);
+        ct_shared[i] = RoundqQ_CUDA(ct_shared[i], Q1, Q);
     __syncthreads();
 
     /* KeySwitch */
-    extern __shared__ uint64_t ctKS[];
-    for(uint32_t i = tid; i <= n; i += bdim){
-        ctKS[i] = 0;
-    }
-    __syncthreads();
-    // a
-    for (uint32_t i = 0; i < N; ++i) {
-        uint64_t atmp = ctExt_CUDA[i];
-        for (uint32_t j = 0; j < digitCountKS; ++j, atmp /= baseKS) {
-            uint64_t a0 = (atmp % baseKS);
-            for (uint32_t k = tid; k < n; k += bdim)
-                ModSubFastEq_CUDA(ctKS[k], keySwitchingkey_CUDA[i*baseKS*digitCountKS*n + a0*digitCountKS*n + j*n + k], Q1);
-        }
-    }
-    __syncthreads();
-    // b
-    if(tid == 0){
-        ctKS[n] = ctExt_CUDA[N];
+    uint64_t temp;
+    for (uint32_t k = tid; k <= n; k += bdim){
+        if (k == n) temp = ct_shared[N]; // b
+        else temp = 0; // a
         for (uint32_t i = 0; i < N; ++i) {
-            uint64_t atmp = ctExt_CUDA[i];
+            uint64_t atmp = ct_shared[i];
             for (uint32_t j = 0; j < digitCountKS; ++j, atmp /= baseKS) {
                 uint64_t a0 = (atmp % baseKS);
-                ModSubFastEq_CUDA(ctKS[n], keySwitchingkey_CUDA[N*baseKS*digitCountKS*n + i*baseKS*digitCountKS + a0*digitCountKS + j], Q1);
+                ModSubFastEq_CUDA(temp, keySwitchingkey_CUDA[i*baseKS*digitCountKS*(n + 1) + a0*digitCountKS*(n + 1) + j*(n + 1) + k], Q1);
             }
         }
+        ctExt_CUDA[k] = temp;
     }
     __syncthreads();
 
     /* Second Modswitch */
     for (size_t i = tid; i <= n; i += bdim)
-        ctKS[i] = RoundqQ_CUDA(ctKS[i], Q2, Q1);
-    __syncthreads();
-
-    /* Copy ctKS to ctExt_CUDA */
-    for(uint32_t i = tid; i <= n; i += bdim){
-        ctExt_CUDA[i] = ctKS[i];
-    }
+        ctExt_CUDA[i] = RoundqQ_CUDA(ctExt_CUDA[i], Q2, Q1);
     __syncthreads();
 }
 
@@ -100,17 +88,17 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
     uint32_t gdim = grid.num_threads(); // number of threads in grid
 
     /* HE Parameters Set */
-    uint64_t M            = params_CUDA[0] << 1;
-    uint64_t N            = params_CUDA[0];
-    uint64_t NHalf        = N >> 1;
-    uint64_t n            = params_CUDA[1];
-    uint64_t Q            = params_CUDA[2];
-    uint64_t QHalf        = params_CUDA[2] >> 1;
-    uint64_t digitsG2     = params_CUDA[3];
-    uint64_t baseG        = params_CUDA[4];
-    int32_t gBits = static_cast<int32_t>(log2(static_cast<double>(baseG)));
-    int32_t gBitsMaxBits = 64 - gBits;
-    uint32_t RGSW_size = digitsG2 * 2 * NHalf;
+    const uint32_t M            = static_cast<uint32_t>(params_CUDA[0] << 1);
+    const uint32_t N            = static_cast<uint32_t>(params_CUDA[0]);
+    const uint32_t NHalf        = N >> 1;
+    const uint32_t n            = static_cast<uint32_t>(params_CUDA[1]);
+    const uint64_t Q            = params_CUDA[2];
+    const uint64_t QHalf        = Q >> 1;
+    const uint32_t digitsG2     = static_cast<uint32_t>(params_CUDA[3]);
+    const uint32_t baseG        = static_cast<uint32_t>(params_CUDA[4]);
+    const uint32_t RGSW_size    = digitsG2 * 2 * NHalf;
+    const int32_t gBits         = static_cast<int32_t>(log2(static_cast<double>(baseG)));
+    const int32_t gBitsMaxBits  = 64 - gBits;
 
     /* cufftdx variables */
     using complex_type = typename FFT::value_type;
@@ -449,18 +437,18 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
     uint32_t bdim = ThisBlockSize();
 
     /* HE Parameters Set */
-    uint64_t M            = params_CUDA[0] << 1;
-    uint64_t N            = params_CUDA[0];
-    uint64_t NHalf        = N >> 1;
-    uint64_t n            = params_CUDA[1];
-    uint64_t Q            = params_CUDA[2];
-    uint64_t QHalf        = params_CUDA[2] >> 1;
-    uint64_t digitsG2     = params_CUDA[3];
-    uint64_t baseG        = params_CUDA[4];
-    int32_t gBits = static_cast<int32_t>(log2(static_cast<double>(baseG)));
-    int32_t gBitsMaxBits = 64 - gBits;
-    uint32_t RGSW_size = digitsG2 * 2 * NHalf;
-    uint32_t syncNum      = static_cast<uint32_t>(params_CUDA[5]); // number of synchronization (cufftdx)
+    const uint32_t M            = static_cast<uint32_t>(params_CUDA[0] << 1);
+    const uint32_t N            = static_cast<uint32_t>(params_CUDA[0]);
+    const uint32_t NHalf        = N >> 1;
+    const uint32_t n            = static_cast<uint32_t>(params_CUDA[1]);
+    const uint64_t Q            = params_CUDA[2];
+    const uint64_t QHalf        = Q >> 1;
+    const uint32_t digitsG2     = static_cast<uint32_t>(params_CUDA[3]);
+    const uint32_t baseG        = static_cast<uint32_t>(params_CUDA[4]);
+    const uint32_t RGSW_size    = digitsG2 * 2 * NHalf;
+    const int32_t gBits         = static_cast<int32_t>(log2(static_cast<double>(baseG)));
+    const int32_t gBitsMaxBits  = 64 - gBits;
+    const uint32_t syncNum      = static_cast<uint32_t>(params_CUDA[5]); // number of synchronization (cufftdx)
 
     /* cufftdx variables */
     using complex_type = typename FFT::value_type;
@@ -504,9 +492,9 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
     __syncthreads();
 
     for(uint32_t round = 0; round < n; ++round){
-        /* Copy acc_CUDA to ct_CUDA */
+        /* Copy acc_CUDA to shared_mem */
         for(uint32_t i = tid; i < N; i += bdim){
-            ct_CUDA[i] = acc_CUDA[i];
+            shared_mem[i] = complex_type {acc_CUDA[i].x, acc_CUDA[i].y};
         }
         __syncthreads();
 
@@ -516,7 +504,7 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
             {
                 unsigned int index = offset + threadIdx.x;
                 for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
-                    thread_data[i] = complex_type {ct_CUDA[index].x, ct_CUDA[index].y};
+                    thread_data[i] = shared_mem[index];
                     // FFT::stride shows how elements from a single FFT should be split between threads
                     index += IFFT::stride;
                 }
@@ -536,21 +524,22 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
                 unsigned int index = offset + threadIdx.x;
                 unsigned int twist_idx = threadIdx.x;
                 for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
-                    ct_CUDA[index].x = thread_data[i].x;
-                    ct_CUDA[index].y = thread_data[i].y;
+                    shared_mem[index] = thread_data[i];
                     // twisting
-                    ct_CUDA[index] = cuCmul(ct_CUDA[index], twiddleTable_CUDA[twist_idx + NHalf]);
+                    double temp = shared_mem[index].x* twiddleTable_CUDA[twist_idx + NHalf].x - shared_mem[index].y * twiddleTable_CUDA[twist_idx + NHalf].y;
+                    shared_mem[index].y = shared_mem[index].x* twiddleTable_CUDA[twist_idx + NHalf].y + shared_mem[index].y * twiddleTable_CUDA[twist_idx + NHalf].x;
+                    shared_mem[index].x = temp;
                     // Round to INT128 and MOD
-                    ct_CUDA[index].x = static_cast<double>(static_cast<__int128_t>(rint(ct_CUDA[index].x)) % static_cast<__int128_t>(Q));
-                    if (ct_CUDA[index].x < 0)
-                        ct_CUDA[index].x += static_cast<double>(Q);
-                    if (ct_CUDA[index].x >= QHalf)
-                        ct_CUDA[index].x -= static_cast<double>(Q);
-                    ct_CUDA[index].y = static_cast<double>(static_cast<__int128_t>(rint(ct_CUDA[index].y)) % static_cast<__int128_t>(Q));
-                    if (ct_CUDA[index].y < 0)
-                        ct_CUDA[index].y += static_cast<double>(Q);
-                    if (ct_CUDA[index].y >= QHalf)
-                        ct_CUDA[index].y -= static_cast<double>(Q);
+                    shared_mem[index].x = static_cast<double>(static_cast<__int128_t>(rint(shared_mem[index].x)) % static_cast<__int128_t>(Q));
+                    if (shared_mem[index].x < 0)
+                        shared_mem[index].x += static_cast<double>(Q);
+                    if (shared_mem[index].x >= QHalf)
+                        shared_mem[index].x -= static_cast<double>(Q);
+                    shared_mem[index].y = static_cast<double>(static_cast<__int128_t>(rint(shared_mem[index].y)) % static_cast<__int128_t>(Q));
+                    if (shared_mem[index].y < 0)
+                        shared_mem[index].y += static_cast<double>(Q);
+                    if (shared_mem[index].y >= QHalf)
+                        shared_mem[index].y -= static_cast<double>(Q);
                     // IFFT::stride shows how elements from a single FFT should be split between threads
                     index += IFFT::stride;
                     twist_idx += IFFT::stride;
@@ -566,8 +555,8 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
         /* SignedDigitDecompose */
         // polynomial from a
         for (size_t k = tid; k < NHalf; k += bdim) {
-            int64_t d0 = static_cast<int64_t>(ct_CUDA[k].x);
-            int64_t d1 = static_cast<int64_t>(ct_CUDA[k].y);
+            int64_t d0 = static_cast<int64_t>(shared_mem[k].x);
+            int64_t d1 = static_cast<int64_t>(shared_mem[k].y);
 
             for (size_t l = 0; l < digitsG2; l += 2) {
                 int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
@@ -590,8 +579,8 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
 
         // polynomial from b
         for (size_t k = tid + NHalf; k < N; k += bdim) {
-            int64_t d0 = static_cast<int64_t>(ct_CUDA[k].x);
-            int64_t d1 = static_cast<int64_t>(ct_CUDA[k].y);
+            int64_t d0 = static_cast<int64_t>(shared_mem[k].x);
+            int64_t d1 = static_cast<int64_t>(shared_mem[k].y);
 
             for (size_t l = 0; l < digitsG2; l += 2) {
                 int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
@@ -787,17 +776,17 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
     * we can transpose "a" to get an encryption under the original secret key z
     * z = (z0, −zq/2−1, . . . , −z1)
     *****************************************/
-    /* Copy acc_CUDA to ct_CUDA */
+    /* Copy acc_CUDA to shared_mem */
     for(uint32_t i = tid; i < NHalf; i += bdim){
-        ct_CUDA[i] = acc_CUDA[i];
+        shared_mem[i] = complex_type {acc_CUDA[i].x, acc_CUDA[i].y};
     }
     __syncthreads();
 
     for(uint32_t i = tid+1; i < NHalf; i += bdim){
-        acc_CUDA[i].x = static_cast<double>((Q - static_cast<uint64_t>(ct_CUDA[NHalf - i].y)));
-        acc_CUDA[i].y = static_cast<double>((Q - static_cast<uint64_t>(ct_CUDA[NHalf - i].x)));
+        acc_CUDA[i].x = static_cast<double>((Q - static_cast<uint64_t>(shared_mem[NHalf - i].y)));
+        acc_CUDA[i].y = static_cast<double>((Q - static_cast<uint64_t>(shared_mem[NHalf - i].x)));
     }
-    if(tid == 0) acc_CUDA[0].y = static_cast<double>((Q - static_cast<uint64_t>(ct_CUDA[0].y)));
+    if(tid == 0) acc_CUDA[0].y = static_cast<double>((Q - static_cast<uint64_t>(shared_mem[0].y)));
     __syncthreads();
 }
 
@@ -1363,7 +1352,14 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_multi::shared_memory_size);
 
     // MKMSwitch shared memory size
-    cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributeMaxDynamicSharedMemorySize, (n + 1) * sizeof(uint64_t));
+    int MKMSwitch_shared_memory_size = (N + 1) * sizeof(uint64_t);
+    if(MKMSwitch_shared_memory_size > 65536)
+        cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 100);
+    else if(MKMSwitch_shared_memory_size > 32768)
+        cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 64);
+    else
+        cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 32);
+    cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributeMaxDynamicSharedMemorySize, MKMSwitch_shared_memory_size);
 
     // cuFFTDx Forward shared memory size
     cudaFuncSetAttribute(cuFFTDxFWD<FFT_fwd>, cudaFuncAttributePreferredSharedMemoryCarveout, 64);
@@ -1434,17 +1430,10 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
         for(int j = 0; j < baseKS; j++){
             for(int k = 0; k < digitCountKS; k++){
                 for(int l = 0; l < n; l++){
-                    keySwitchingkey_host[i*baseKS*digitCountKS*n + j*digitCountKS*n + k*n + l] 
+                    keySwitchingkey_host[i*baseKS*digitCountKS*(n + 1) + j*digitCountKS*(n + 1) + k*(n + 1) + l] 
                         = static_cast<uint64_t>(keySwitchingKey->GetElementsA()[i][j][k][l].ConvertToInt());
                 }
-            }
-        }
-    }
-    // B
-    for(int i = 0; i < N; i++){
-        for(int j = 0; j < baseKS; j++){
-            for(int k = 0; k < digitCountKS; k++){
-                keySwitchingkey_host[N*baseKS*digitCountKS*n + i*baseKS*digitCountKS + j*digitCountKS + k] 
+                keySwitchingkey_host[i*baseKS*digitCountKS*(n + 1) + j*digitCountKS*(n + 1) + k*(n + 1) + n] 
                     = static_cast<uint64_t>(keySwitchingKey->GetElementsB()[i][j][k].ConvertToInt());
             }
         }
@@ -2680,7 +2669,7 @@ void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_p
 
     for (int s = 0; s < bootstrap_num; s++) {
         cudaMemcpyAsync(ctExt_CUDA + s*(N + 1), ctExt_host + s*(N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[s % SM_count]);
-        MKMSwitchKernel<<<1, 512, (n + 1) * sizeof(uint64_t), streams[s % SM_count]>>>(ctExt_CUDA + s*(N + 1), keySwitchingkey_CUDA, paramsMKM_CUDA);
+        MKMSwitchKernel<<<1, 512, (N + 1) * sizeof(uint64_t), streams[s % SM_count]>>>(ctExt_CUDA + s*(N + 1), keySwitchingkey_CUDA, paramsMKM_CUDA);
         cudaMemcpyAsync(ctExt_host + s*(N + 1), ctExt_CUDA + s*(N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyDeviceToHost, streams[s % SM_count]);
     }
     // CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
