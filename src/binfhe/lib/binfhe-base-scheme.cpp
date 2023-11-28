@@ -652,7 +652,7 @@ LWECiphertext BinFHEScheme::BootstrapFunc(const std::shared_ptr<BinFHECryptoPara
     std::vector<NativePoly>& accVec = acc->GetElements();
     // the accumulator result is encrypted w.r.t. the transposed secret key
     // we can transpose "a" to get an encryption under the original secret key
-    accVec[0] = accVec[0].Transpose();
+    //accVec[0] = accVec[0].Transpose();
     accVec[0].SetFormat(Format::COEFFICIENT);
     accVec[1].SetFormat(Format::COEFFICIENT);
 
@@ -728,9 +728,6 @@ std::shared_ptr<std::vector<LWECiphertext>> BinFHEScheme::BootstrapFunc(const st
     auto& LWEParams = params->GetLWEParams();
     ACCscheme->MKMSwitch(LWEParams, ctExt, LWEParams->GetqKS(), fmod);
 
-    // for (uint32_t count = 0; count < ct.size(); count++){
-    //     ct[count] = (*ctExt)[count];
-    // }
     return ctExt;
 }
 

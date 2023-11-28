@@ -44,6 +44,7 @@ std::vector<cudaStream_t> streams;
 
 /* Pointers point to GPU global memory */
 Complex_d* GINX_bootstrappingKey_CUDA;
+uint64_t* keySwitchingkey_CUDA;
 Complex_d* monomial_CUDA;
 Complex_d* twiddleTable_CUDA;
 Complex_d* ct_CUDA;
@@ -51,7 +52,7 @@ Complex_d* dct_CUDA;
 uint64_t* params_CUDA;
 Complex_d* acc_CUDA;
 uint64_t* a_CUDA;
-uint64_t* keySwitchingkey_CUDA;
+uint64_t* ctExt_CUDA;
 
 /* Multiple small thread blocks mode bootstrapping */
 template<class FFT, class IFFT>

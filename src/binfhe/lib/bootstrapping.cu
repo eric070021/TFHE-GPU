@@ -1334,36 +1334,45 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
 
     /* Increase max shared memory */
     // Single block Bootstrapping shared memory size
-    if(FFT::shared_memory_size > 65536)
-        cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 100);
-    else if(FFT::shared_memory_size > 32768)
-        cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 64);
-    else
-        cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 32);
-    cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size);
+    if(FFT::shared_memory_size > 65536){
+        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 100));
+    }
+    else if(FFT::shared_memory_size > 32768){
+        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
+    }
+    else{
+        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 32));
+    }
+    CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size));
 
     // Multi block Bootstrapping shared memory size
-    if(FFT_multi::shared_memory_size > 65536)
-        cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 100);
-    else if(FFT_multi::shared_memory_size > 32768)
-        cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 64);
-    else
-        cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 32);
-    cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_multi::shared_memory_size);
+    if(FFT_multi::shared_memory_size > 65536){
+        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 100));
+    }
+    else if(FFT_multi::shared_memory_size > 32768){
+        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
+    }
+    else{
+        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 32));
+    }
+    CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_multi::shared_memory_size));
 
     // MKMSwitch shared memory size
     int MKMSwitch_shared_memory_size = (N + 1) * sizeof(uint64_t);
-    if(MKMSwitch_shared_memory_size > 65536)
-        cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 100);
-    else if(MKMSwitch_shared_memory_size > 32768)
-        cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 64);
-    else
-        cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 32);
-    cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributeMaxDynamicSharedMemorySize, MKMSwitch_shared_memory_size);
+    if(MKMSwitch_shared_memory_size > 65536){
+        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 100));
+    }
+    else if(MKMSwitch_shared_memory_size > 32768){
+        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
+    }
+    else{
+        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 32));
+    }
+    CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributeMaxDynamicSharedMemorySize, MKMSwitch_shared_memory_size));
 
     // cuFFTDx Forward shared memory size
-    cudaFuncSetAttribute(cuFFTDxFWD<FFT_fwd>, cudaFuncAttributePreferredSharedMemoryCarveout, 64);
-    cudaFuncSetAttribute(cuFFTDxFWD<FFT_fwd>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_fwd::shared_memory_size);
+    CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(cuFFTDxFWD<FFT_fwd>, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
+    CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(cuFFTDxFWD<FFT_fwd>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_fwd::shared_memory_size));
 
     /* Initialize twiddle table */
     Complex *twiddleTable;
@@ -1425,7 +1434,6 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     /* Initialize keySwitching key */
     uint64_t *keySwitchingkey_host;
     cudaMallocHost((void**)&keySwitchingkey_host, N * baseKS * digitCountKS * (n + 1) * sizeof(uint64_t));
-    // A
     for(int i = 0; i < N; i++){
         for(int j = 0; j < baseKS; j++){
             for(int k = 0; k < digitCountKS; k++){
@@ -1488,6 +1496,9 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
 
     /* Allocate a_CUDA on GPU */
     cudaMalloc(&a_CUDA, SM_count * n * sizeof(uint64_t));
+
+    /* Allocate ctExt_CUDA on GPU */
+    cudaMalloc(&ctExt_CUDA, SM_count * (N + 1) * sizeof(uint64_t));
 }
 
 void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d, std::string mode)
@@ -1920,16 +1931,16 @@ template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
 void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d, std::string mode)
 {   
     /* parameters set */
-    auto mod        = a.GetModulus();
-    uint32_t modInt = mod.ConvertToInt();
-    auto Q            = params->GetQ();
-    NativeInteger QHalf = Q >> 1;
-    NativeInteger::SignedNativeInt Q_int = Q.ConvertToInt();
-    uint32_t N         = params->GetN();
-    uint32_t NHalf     = N >> 1;
-    uint32_t n =  a.GetLength();
-    uint32_t M      = 2 * params->GetN();
-    uint32_t digitsG2 = params->GetDigitsG() << 1;
+    auto mod                = a.GetModulus();
+    uint32_t modInt         = mod.ConvertToInt();
+    auto Q                  = params->GetQ();
+    NativeInteger QHalf     = Q >> 1;
+    int64_t Q_int           = Q.ConvertToInt();
+    uint32_t N              = params->GetN();
+    uint32_t NHalf          = N >> 1;
+    uint32_t n              =  a.GetLength();
+    uint32_t M              = 2 * params->GetN();
+    uint32_t digitsG2       = params->GetDigitsG() << 1;
 
     /* Configure cuFFTDx */
     using FFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() + cufftdx::ElementsPerThread<8>() +
@@ -1958,22 +1969,6 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
             std::cerr << "Exceed Maximum blocks per threads (" << gpuInfoList[0].maxThreadsPerBlock << ")\n";
             std::cerr << "Using " << (NHalf / FFT_multi::elements_per_thread * digitsG2) << " threads" << ")\n";
             std::cerr << "NHalf: " << NHalf << "FFT::elements_per_thread: " << FFT_multi::elements_per_thread << ")\n";
-            exit(1);
-        }
-    }
-
-    /* Check whether shared memory size exceeds cuda limitation */
-    if(mode == "SINGLE"){
-        if(FFT::shared_memory_size > gpuInfoList[0].sharedMemoryPerBlock){
-            std::cerr << "Exceed Maximum sharedMemoryPerBlock ("<< gpuInfoList[0].sharedMemoryPerBlock << ")\n";
-            std::cerr << "Declare "<< FFT::shared_memory_size << " now" << "\n";
-            exit(1);
-        }
-    }
-    else if(mode == "MULTI"){
-        if(FFT_multi::shared_memory_size > gpuInfoList[0].sharedMemoryPerBlock){
-            std::cerr << "Exceed Maximum sharedMemoryPerBlock ("<< gpuInfoList[0].sharedMemoryPerBlock << ")\n";
-            std::cerr << "Declare "<< FFT_multi::shared_memory_size << " now" << "\n";
             exit(1);
         }
     }
@@ -2018,36 +2013,6 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
             acc_d[i][j + NHalf] = Complex(acc_d_arr[i*NHalf + j].imag(), 0);
         }
     }
-
-    // /* Debugging txt files */
-    // std::ofstream outputFile;
-    // outputFile.open("acc.txt", std::ios::out);
-    // for(uint32_t i = 0; i < 2; i++)
-    //     for(uint32_t j = 0; j < (N >> 1); j++)
-    //         outputFile << "(" << acc_d_arr[i*(N >> 1) + j].real() << ", " << acc_d_arr[i*(N >> 1) + j].imag() << ")" << std::endl;
-    // outputFile.close();
-
-    // // Copy the ct_CUDA back to the host
-    // Complex* ct_arr;
-    // cudaMallocHost((void**)&ct_arr, 2 * NHalf * sizeof(Complex));
-    // cudaMemcpy(ct_arr, ct_CUDA, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost);
-
-    // outputFile.open("ct.txt", std::ios::out);
-    // for(uint32_t i = 0; i < 2; i++)
-    //     for(uint32_t j = 0; j < (N >> 1); j++)
-    //         outputFile << "(" << ct_arr[i*(N >> 1) + j].real() << ", " << ct_arr[i*(N >> 1) + j].imag() << ")" << std::endl;
-    // outputFile.close();
-
-    // // Copy the dct_CUDA back to the host
-    // Complex* dct_arr;
-    // cudaMallocHost((void**)&dct_arr, digitsG2 * NHalf * sizeof(Complex));
-    // cudaMemcpy(dct_arr, dct_CUDA, digitsG2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost);
-
-    // outputFile.open("dct.txt", std::ios::out);
-    // for(uint32_t i = 0; i < digitsG2; i++)
-    //     for(uint32_t j = 0; j < (N >> 1); j++)
-    //         outputFile << "(" << dct_arr[i*(N >> 1) + j].real() << ", " << dct_arr[i*(N >> 1) + j].imag() << ")" << std::endl;
-    // outputFile.close();
 }
 
 void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
@@ -2482,19 +2447,19 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
         std::vector<std::vector<std::vector<Complex>>>& acc_d, std::string mode)
 {   
     /* parameters set */
-    auto mod        = a[0].GetModulus();
-    uint32_t modInt = mod.ConvertToInt();
-    auto Q            = params->GetQ();
-    NativeInteger QHalf = Q >> 1;
-    NativeInteger::SignedNativeInt Q_int = Q.ConvertToInt();
-    uint32_t N         = params->GetN();
-    uint32_t NHalf     = N >> 1;
-    uint32_t n =  a[0].GetLength();
-    uint32_t M      = 2 * params->GetN();
-    uint32_t digitsG2 = params->GetDigitsG() << 1;
+    auto mod                = a[0].GetModulus();
+    uint32_t modInt         = mod.ConvertToInt();
+    auto Q                  = params->GetQ();
+    NativeInteger QHalf     = Q >> 1;
+    int64_t Q_int           = Q.ConvertToInt();
+    uint32_t N              = params->GetN();
+    uint32_t NHalf          = N >> 1;
+    uint32_t n              =  a[0].GetLength();
+    uint32_t M              = 2 * params->GetN();
+    uint32_t digitsG2       = params->GetDigitsG() << 1;
 
-    int bootstrap_num = acc_d.size();
-    int SM_count = gpuInfoList[0].multiprocessorCount;
+    int bootstrap_num       = acc_d.size();
+    int SM_count            = gpuInfoList[0].multiprocessorCount;
 
     /* Configure cuFFTDx */
     using FFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() + cufftdx::ElementsPerThread<8>() +
@@ -2523,22 +2488,6 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
             std::cerr << "Exceed Maximum blocks per threads (" << gpuInfoList[0].maxThreadsPerBlock << ")\n";
             std::cerr << "Using " << (NHalf / FFT_multi::elements_per_thread * digitsG2) << " threads" << ")\n";
             std::cerr << "NHalf: " << NHalf << "FFT::elements_per_thread: " << FFT_multi::elements_per_thread << ")\n";
-            exit(1);
-        }
-    }
-
-    /* Check whether shared memory size exceeds cuda limitation */
-    if(mode == "SINGLE"){
-        if(FFT::shared_memory_size > gpuInfoList[0].sharedMemoryPerBlock){
-            std::cerr << "Exceed Maximum sharedMemoryPerBlock ("<< gpuInfoList[0].sharedMemoryPerBlock << ")\n";
-            std::cerr << "Declare "<< FFT::shared_memory_size << " now" << "\n";
-            exit(1);
-        }
-    }
-    else if(mode == "MULTI"){
-        if(FFT_multi::shared_memory_size > gpuInfoList[0].sharedMemoryPerBlock){
-            std::cerr << "Exceed Maximum sharedMemoryPerBlock ("<< gpuInfoList[0].sharedMemoryPerBlock << ")\n";
-            std::cerr << "Declare "<< FFT_multi::shared_memory_size << " now" << "\n";
             exit(1);
         }
     }
@@ -2648,9 +2597,7 @@ void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_p
     cudaMemcpy(paramsMKM_CUDA, paramters, 8 * sizeof(uint64_t), cudaMemcpyHostToDevice);
     cudaFreeHost(paramters);
 
-    /* Initialize ctExt_CUDA */
-    uint64_t* ctExt_CUDA;
-    cudaMalloc((void**)&ctExt_CUDA, bootstrap_num * (N + 1) * sizeof(uint64_t));
+    /* Initialize ctExt_host */
     uint64_t* ctExt_host;
     cudaMallocHost((void**)&ctExt_host, bootstrap_num * (N + 1) * sizeof(uint64_t));
     for (int s = 0; s < bootstrap_num; s++){
@@ -2668,9 +2615,9 @@ void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_p
     cudaEventRecord(start);
 
     for (int s = 0; s < bootstrap_num; s++) {
-        cudaMemcpyAsync(ctExt_CUDA + s*(N + 1), ctExt_host + s*(N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[s % SM_count]);
-        MKMSwitchKernel<<<1, 512, (N + 1) * sizeof(uint64_t), streams[s % SM_count]>>>(ctExt_CUDA + s*(N + 1), keySwitchingkey_CUDA, paramsMKM_CUDA);
-        cudaMemcpyAsync(ctExt_host + s*(N + 1), ctExt_CUDA + s*(N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyDeviceToHost, streams[s % SM_count]);
+        cudaMemcpyAsync(ctExt_CUDA + (s % SM_count)*(N + 1), ctExt_host + s*(N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[s % SM_count]);
+        MKMSwitchKernel<<<1, 768, (N + 1) * sizeof(uint64_t), streams[s % SM_count]>>>(ctExt_CUDA + (s % SM_count)*(N + 1), keySwitchingkey_CUDA, paramsMKM_CUDA);
+        cudaMemcpyAsync(ctExt_host + s*(N + 1), ctExt_CUDA + (s % SM_count)*(N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyDeviceToHost, streams[s % SM_count]);
     }
     // CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
     // CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
@@ -2734,3 +2681,33 @@ void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_p
 //     }
 //     cudaFreeHost(bootstrappingKey);
 // }
+
+// /* Debugging txt files */
+// std::ofstream outputFile;
+// outputFile.open("acc.txt", std::ios::out);
+// for(uint32_t i = 0; i < 2; i++)
+//     for(uint32_t j = 0; j < (N >> 1); j++)
+//         outputFile << "(" << acc_d_arr[i*(N >> 1) + j].real() << ", " << acc_d_arr[i*(N >> 1) + j].imag() << ")" << std::endl;
+// outputFile.close();
+
+// // Copy the ct_CUDA back to the host
+// Complex* ct_arr;
+// cudaMallocHost((void**)&ct_arr, 2 * NHalf * sizeof(Complex));
+// cudaMemcpy(ct_arr, ct_CUDA, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost);
+
+// outputFile.open("ct.txt", std::ios::out);
+// for(uint32_t i = 0; i < 2; i++)
+//     for(uint32_t j = 0; j < (N >> 1); j++)
+//         outputFile << "(" << ct_arr[i*(N >> 1) + j].real() << ", " << ct_arr[i*(N >> 1) + j].imag() << ")" << std::endl;
+// outputFile.close();
+
+// // Copy the dct_CUDA back to the host
+// Complex* dct_arr;
+// cudaMallocHost((void**)&dct_arr, digitsG2 * NHalf * sizeof(Complex));
+// cudaMemcpy(dct_arr, dct_CUDA, digitsG2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost);
+
+// outputFile.open("dct.txt", std::ios::out);
+// for(uint32_t i = 0; i < digitsG2; i++)
+//     for(uint32_t j = 0; j < (N >> 1); j++)
+//         outputFile << "(" << dct_arr[i*(N >> 1) + j].real() << ", " << dct_arr[i*(N >> 1) + j].imag() << ")" << std::endl;
+// outputFile.close();
