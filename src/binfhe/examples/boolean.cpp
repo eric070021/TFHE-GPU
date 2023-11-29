@@ -60,46 +60,96 @@ int main() {
 
     std::cout << "Completed the key generation." << std::endl;
 
+    // std::vector<LWECiphertext> ct1_vec, ct2_vec;
+    // for (int i = 0; i < 10; i++) {
+    //     auto ct1 = cc.Encrypt(sk, 1);
+    //     auto ct2 = cc.Encrypt(sk, 0);
+    //     ct1_vec.push_back(ct1);
+    //     ct2_vec.push_back(ct2);
+    // }
+    // auto start = std::chrono::high_resolution_clock::now();
+    // auto ct_res_vec = cc.EvalBinGate(XNOR, ct1_vec, ct2_vec);
+    // auto end = std::chrono::high_resolution_clock::now();
+    // auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
+    // std::cout << "Time: " << elapsed.count() << " ms" << std::endl;
+    // for (int i = 0; i < 10; i++) {
+    //     LWEPlaintext result;
+    //     cc.Decrypt(sk, ct_res_vec[i], &result);
+    //     std::cout << "1 NAND 1 = " << result << std::endl;
+    // }
+
     LWEPlaintext result;
+    std::vector<LWECiphertext> ct1_vec, ct2_vec;
+    for (int i = 0; i < 1; i++) {
+        auto ct1 = cc.Encrypt(sk, 1);
+        auto ct2 = cc.Encrypt(sk, 1);
+        ct1_vec.push_back(ct1);
+        ct2_vec.push_back(ct2);
+    }
+    auto start = std::chrono::high_resolution_clock::now();
 
-    auto ct1 = cc.Encrypt(sk, 1);
-    auto ct2 = cc.Encrypt(sk, 1);
-
-    auto start = std::chrono::high_resolution_clock::now();   
-
-    // LWECiphertext ctNAND;
-    // for(int i = 0; i < 1000; ++ i)
-    //   ctNAND = cc.EvalBinGate(NAND, ct1, ct2);
-    // cc.Decrypt(sk, ctNAND, &result);
-    // std::cout << "1 NAND 1 = " << result << std::endl;
-
-    auto ctAND = cc.EvalBinGate(AND, ct1, ct2);
-    cc.Decrypt(sk, ctAND, &result);
+    auto ctAND = cc.EvalBinGate(AND, ct1_vec, ct2_vec);
+    cc.Decrypt(sk, ctAND[0], &result);
     std::cout << "1 AND 1 = " << result << std::endl;
 
-    auto ctNAND = cc.EvalBinGate(NAND, ct1, ct2);
-    cc.Decrypt(sk, ctNAND, &result);
+    auto ctNAND = cc.EvalBinGate(NAND, ct1_vec, ct2_vec);
+    cc.Decrypt(sk, ctNAND[0], &result);
     std::cout << "1 NAND 1 = " << result << std::endl;
 
-    auto ctOR = cc.EvalBinGate(OR, ct1, ct2);
-    cc.Decrypt(sk, ctOR, &result);
+    auto ctOR = cc.EvalBinGate(OR, ct1_vec, ct2_vec);
+    cc.Decrypt(sk, ctOR[0], &result);
     std::cout << "1 OR 1 = " << result << std::endl;
 
-    auto ctNOR = cc.EvalBinGate(NOR, ct1, ct2);
-    cc.Decrypt(sk, ctNOR, &result);
+    auto ctNOR = cc.EvalBinGate(NOR, ct1_vec, ct2_vec);
+    cc.Decrypt(sk, ctNOR[0], &result);
     std::cout << "1 NOR 1 = " << result << std::endl;
 
-    auto ctXOR = cc.EvalBinGate(XOR, ct1, ct2);
-    cc.Decrypt(sk, ctXOR, &result);
+    auto ctXOR = cc.EvalBinGate(XOR, ct1_vec, ct2_vec);
+    cc.Decrypt(sk, ctXOR[0], &result);
     std::cout << "1 XOR 1 = " << result << std::endl;
 
-    auto ctXNOR = cc.EvalBinGate(XNOR, ct1, ct2);
-    cc.Decrypt(sk, ctXNOR, &result);
+    auto ctXNOR = cc.EvalBinGate(XNOR, ct1_vec, ct2_vec);
+    cc.Decrypt(sk, ctXNOR[0], &result);
     std::cout << "1 XNOR 1 = " << result << std::endl;
 
     auto end = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
     std::cout << "Time: " << elapsed.count() << " ms" << std::endl;
+
+    // LWEPlaintext result;
+
+    // auto ct1 = cc.Encrypt(sk, 1);
+    // auto ct2 = cc.Encrypt(sk, 1);
+
+    // auto start = std::chrono::high_resolution_clock::now();   
+
+    // auto ctAND = cc.EvalBinGate(AND, ct1, ct2);
+    // cc.Decrypt(sk, ctAND, &result);
+    // std::cout << "1 AND 1 = " << result << std::endl;
+
+    // auto ctNAND = cc.EvalBinGate(NAND, ct1, ct2);
+    // cc.Decrypt(sk, ctNAND, &result);
+    // std::cout << "1 NAND 1 = " << result << std::endl;
+
+    // auto ctOR = cc.EvalBinGate(OR, ct1, ct2);
+    // cc.Decrypt(sk, ctOR, &result);
+    // std::cout << "1 OR 1 = " << result << std::endl;
+
+    // auto ctNOR = cc.EvalBinGate(NOR, ct1, ct2);
+    // cc.Decrypt(sk, ctNOR, &result);
+    // std::cout << "1 NOR 1 = " << result << std::endl;
+
+    // auto ctXOR = cc.EvalBinGate(XOR, ct1, ct2);
+    // cc.Decrypt(sk, ctXOR, &result);
+    // std::cout << "1 XOR 1 = " << result << std::endl;
+
+    // auto ctXNOR = cc.EvalBinGate(XNOR, ct1, ct2);
+    // cc.Decrypt(sk, ctXNOR, &result);
+    // std::cout << "1 XNOR 1 = " << result << std::endl;
+
+    // auto end = std::chrono::high_resolution_clock::now();
+    // auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
+    // std::cout << "Time: " << elapsed.count() << " ms" << std::endl;
 
     return 0;
 }

@@ -250,7 +250,7 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
         }
     }
 
-    AddToAccCGGI_CUDA(params, a, acc_d_vec, "MULTI");
+    AddToAccCGGI_CUDA(params, a, acc_d_vec, "SINGLE");
 
     //cast acc_d_vec back to NativePoly
     for (uint32_t count = 0; count < acc->size(); count++){

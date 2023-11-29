@@ -241,15 +241,6 @@ public:
     LWECiphertext EvalFunc(ConstLWECiphertext ct, const std::vector<NativeInteger>& LUT) const;
 
     /**
-   * Evaluate an arbitrary function
-   *
-   * @param &ct1 vector of ciphertexts to be bootstrapped
-   * @param LUT the look-up table of the to-be-evaluated function
-   * @return a shared pointer to the resulting ciphertext
-   */
-    std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const;
-
-    /**
    * Generate the LUT for the to-be-evaluated function
    *
    * @param f the to-be-evaluated function
@@ -342,6 +333,25 @@ public:
     NativeInteger GetBeta() const {
         return 128;
     }
+
+    /**
+   * Evaluate an arbitrary function
+   *
+   * @param &ct1 vector of ciphertexts to be bootstrapped
+   * @param LUT the look-up table of the to-be-evaluated function
+   * @return a shared pointer to the resulting ciphertext
+   */
+    std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const;
+
+    /**
+   * Evaluates a binary gate (calls bootstrapping as a subroutine)
+   *
+   * @param gate the gate; can be AND, OR, NAND, NOR, XOR, or XNOR
+   * @param &ct1 first vector of ciphertexts
+   * @param &ct2 second vector of ciphertexts
+   * @return a shared pointer to the resulting ciphertext
+   */
+    std::vector<LWECiphertext> EvalBinGate(BINGATE gate, const std::vector<LWECiphertext>& ct1, const std::vector<LWECiphertext>& ct2) const;
 
 private:
     // Shared pointer to Ring GSW + LWE parameters

@@ -136,22 +136,6 @@ public:
     LWECiphertext EvalFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                            ConstLWECiphertext ct, const std::vector<NativeInteger>& LUT,
                            const NativeInteger beta) const;
-    
-    /**
-   * Evaluate an arbitrary function
-   *
-   * @param params a shared pointer to RingGSW scheme parameters
-   * @param &EK a shared pointer to the bootstrapping keys
-   * @param &ct1 vector of input ciphertexts
-   * @param lwescheme a shared pointer to additive LWE scheme
-   * @param LUT the look-up table of the to-be-evaluated function
-   * @param beta the error bound
-   * @param bigger_q the ciphertext modulus
-   * @return a vector of the resulting ciphertexts
-   */
-    std::shared_ptr<std::vector<LWECiphertext>> EvalFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
-                           const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT,
-                           const NativeInteger beta) const;
 
     /**
    * Evaluate a round down function
@@ -196,6 +180,36 @@ public:
     std::vector<LWECiphertext> EvalDecomp(const std::shared_ptr<BinFHECryptoParams> params,
                                           const std::map<uint32_t, RingGSWBTKey>& EKs, ConstLWECiphertext ct,
                                           const NativeInteger beta) const;
+
+     /**
+   * Evaluates a binary gate (calls bootstrapping as a subroutine)
+   *
+   * @param params a shared pointer to RingGSW scheme parameters
+   * @param gate the gate; can be AND, OR, NAND, NOR, XOR, or XOR
+   * @param &EK a shared pointer to the bootstrapping keys
+   * @param ct1 first ciphertext
+   * @param ct2 second ciphertext
+   * @param lwescheme a shared pointer to additive LWE scheme
+   * @return a shared pointer to the resulting ciphertext
+   */
+    std::shared_ptr<std::vector<LWECiphertext>> EvalBinGate(const std::shared_ptr<BinFHECryptoParams> params, BINGATE gate, const RingGSWBTKey& EK,
+                              const std::vector<LWECiphertext>& ct1, const std::vector<LWECiphertext>& ct2) const;
+
+     /**
+   * Evaluate an arbitrary function
+   *
+   * @param params a shared pointer to RingGSW scheme parameters
+   * @param &EK a shared pointer to the bootstrapping keys
+   * @param &ct1 vector of input ciphertexts
+   * @param lwescheme a shared pointer to additive LWE scheme
+   * @param LUT the look-up table of the to-be-evaluated function
+   * @param beta the error bound
+   * @param bigger_q the ciphertext modulus
+   * @return a vector of the resulting ciphertexts
+   */
+    std::shared_ptr<std::vector<LWECiphertext>> EvalFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
+                           const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT,
+                           const NativeInteger beta) const;
 
 private:
     /**
@@ -242,6 +256,20 @@ private:
     LWECiphertext BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                                 ConstLWECiphertext ct, const Func f, const NativeInteger fmod) const;
 
+
+    /**
+   * Core bootstrapping operation
+   *
+   * @param params a shared pointer to RingGSW scheme parameters
+   * @param &EK a shared pointer to the bootstrapping keys
+   * @param gate the gate; can be AND, OR, NAND, NOR, XOR, or XOR
+   * @param &ct vector of input ciphertexts
+   * @param lwescheme a shared pointer to additive LWE scheme
+   * @return the output RingLWE accumulator
+   */
+    std::shared_ptr<std::vector<RLWECiphertext>> BootstrapGateCore(const std::shared_ptr<BinFHECryptoParams> params, BINGATE gate,
+                                     const RingGSWACCKey ek, const std::vector<LWECiphertext>& ct) const;
+
     /**
    * Core bootstrapping operation
    *
@@ -254,7 +282,7 @@ private:
    */
     template <typename Func>
     std::shared_ptr<std::vector<RLWECiphertext>> BootstrapFuncCore(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWACCKey ek,
-                                     std::vector<LWECiphertext>& ct, const Func f, const NativeInteger fmod) const;
+                                     const std::vector<LWECiphertext>& ct, const Func f, const NativeInteger fmod) const;
 
    /**
    * Bootstraps a fresh ciphertext
@@ -267,7 +295,7 @@ private:
    */
     template <typename Func>
     std::shared_ptr<std::vector<LWECiphertext>> BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
-                                std::vector<LWECiphertext>& ct, const Func f, const NativeInteger fmod) const;
+                                const std::vector<LWECiphertext>& ct, const Func f, const NativeInteger fmod) const;
 
     /**
    * GPU setup wrapper

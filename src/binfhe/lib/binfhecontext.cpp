@@ -259,11 +259,6 @@ LWECiphertext BinFHEContext::EvalFunc(ConstLWECiphertext ct, const std::vector<N
     return m_binfhescheme->EvalFunc(m_params, m_BTKey, ct, LUT, beta);
 }
 
-std::vector<LWECiphertext> BinFHEContext::EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const {
-    NativeInteger beta = GetBeta();
-    return (*m_binfhescheme->EvalFunc(m_params, m_BTKey, ct, LUT, beta));
-}
-
 LWECiphertext BinFHEContext::EvalFloor(ConstLWECiphertext ct, uint32_t roundbits) const {
     //    auto q = m_params->GetLWEParams()->Getq().ConvertToInt();
     //    if (roundbits != 0) {
@@ -308,6 +303,19 @@ std::vector<NativeInteger> BinFHEContext::GenerateLUTviaFunction(NativeInteger (
     }
 
     return vec;
+}
+
+/**************************************************************************************************************************************
+*  Vector version of the above functions
+***************************************************************************************************************************************/
+
+std::vector<LWECiphertext> BinFHEContext::EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const {
+    NativeInteger beta = GetBeta();
+    return (*m_binfhescheme->EvalFunc(m_params, m_BTKey, ct, LUT, beta));
+}
+
+std::vector<LWECiphertext> BinFHEContext::EvalBinGate(BINGATE gate, const std::vector<LWECiphertext>& ct1, const std::vector<LWECiphertext>& ct2) const{
+    return (*m_binfhescheme->EvalBinGate(m_params, gate, m_BTKey, ct1, ct2));
 }
 
 }  // namespace lbcrypto
