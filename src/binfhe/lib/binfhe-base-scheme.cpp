@@ -726,7 +726,7 @@ std::shared_ptr<std::vector<LWECiphertext>> BinFHEScheme::BootstrapFunc(const st
     }
 
     auto& LWEParams = params->GetLWEParams();
-    ACCscheme->MKMSwitch(LWEParams, ctExt, LWEParams->GetqKS(), fmod);
+    ACCscheme->MKMSwitch(LWEParams, ctExt, fmod);
 
     return ctExt;
 }

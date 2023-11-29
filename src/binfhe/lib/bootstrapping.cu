@@ -26,19 +26,18 @@ __device__ inline uint64_t RoundqQ_CUDA(const uint64_t &v, const uint64_t &q, co
     return static_cast<uint64_t>(floor(0.5 + static_cast<double>(v) * static_cast<double>(q) / static_cast<double>(Q))) % q;
 }
 
-__global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_CUDA, uint64_t *paramsMKM_CUDA){
+__global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_CUDA, uint64_t fmod){
     /* GPU Parameters Set */
     uint32_t tid = ThisThreadRankInBlock();
     uint32_t bdim = ThisBlockSize();
 
     /* HE Parameters Set */
-    const uint32_t n              = static_cast<uint32_t>(paramsMKM_CUDA[0]);
-    const uint32_t N              = static_cast<uint32_t>(paramsMKM_CUDA[1]);
-    const uint64_t Q              = paramsMKM_CUDA[3];
-    const uint32_t baseKS         = static_cast<uint32_t>(paramsMKM_CUDA[4]);
-    const uint32_t digitCountKS   = static_cast<uint32_t>(paramsMKM_CUDA[5]);
-    const uint64_t Q1             = paramsMKM_CUDA[6];
-    const uint64_t Q2             = paramsMKM_CUDA[7];
+    const uint32_t n              = static_cast<uint32_t>(params_CUDA[0]);
+    const uint32_t N              = static_cast<uint32_t>(params_CUDA[1]);
+    const uint64_t Q              = params_CUDA[3];
+    const uint64_t qKS            = params_CUDA[6];
+    const uint32_t baseKS         = static_cast<uint32_t>(params_CUDA[7]);
+    const uint32_t digitCountKS   = static_cast<uint32_t>(params_CUDA[8]);
 
     /* Shared memory */
     extern __shared__ uint64_t ct_shared[];
@@ -49,7 +48,7 @@ __global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_
 
     /* First Modswitch */
     for (size_t i = tid; i <= N; i += bdim)
-        ct_shared[i] = RoundqQ_CUDA(ct_shared[i], Q1, Q);
+        ct_shared[i] = RoundqQ_CUDA(ct_shared[i], qKS, Q);
     __syncthreads();
 
     /* KeySwitch */
@@ -61,7 +60,7 @@ __global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_
             uint64_t atmp = ct_shared[i];
             for (uint32_t j = 0; j < digitCountKS; ++j, atmp /= baseKS) {
                 uint64_t a0 = (atmp % baseKS);
-                ModSubFastEq_CUDA(temp, keySwitchingkey_CUDA[i*baseKS*digitCountKS*(n + 1) + a0*digitCountKS*(n + 1) + j*(n + 1) + k], Q1);
+                ModSubFastEq_CUDA(temp, keySwitchingkey_CUDA[i*baseKS*digitCountKS*(n + 1) + a0*digitCountKS*(n + 1) + j*(n + 1) + k], qKS);
             }
         }
         ctExt_CUDA[k] = temp;
@@ -70,14 +69,14 @@ __global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_
 
     /* Second Modswitch */
     for (size_t i = tid; i <= n; i += bdim)
-        ctExt_CUDA[i] = RoundqQ_CUDA(ctExt_CUDA[i], Q2, Q1);
+        ctExt_CUDA[i] = RoundqQ_CUDA(ctExt_CUDA[i], fmod, qKS);
     __syncthreads();
 }
 
 template<class FFT, class IFFT>
 __launch_bounds__(FFT::max_threads_per_block)
 __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
-        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, uint64_t* params_CUDA, Complex_d* GINX_bootstrappingKey_CUDA){
+        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA){
     
     /* GPU Parameters Set */
     cg::grid_group grid = cg::this_grid();
@@ -88,14 +87,14 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
     uint32_t gdim = grid.num_threads(); // number of threads in grid
 
     /* HE Parameters Set */
-    const uint32_t M            = static_cast<uint32_t>(params_CUDA[0] << 1);
-    const uint32_t N            = static_cast<uint32_t>(params_CUDA[0]);
+    const uint32_t n            = static_cast<uint32_t>(params_CUDA[0]);
+    const uint32_t M            = static_cast<uint32_t>(params_CUDA[1] << 1);
+    const uint32_t N            = static_cast<uint32_t>(params_CUDA[1]);
     const uint32_t NHalf        = N >> 1;
-    const uint32_t n            = static_cast<uint32_t>(params_CUDA[1]);
-    const uint64_t Q            = params_CUDA[2];
+    const uint64_t Q            = params_CUDA[3];
     const uint64_t QHalf        = Q >> 1;
-    const uint32_t digitsG2     = static_cast<uint32_t>(params_CUDA[3]);
     const uint32_t baseG        = static_cast<uint32_t>(params_CUDA[4]);
+    const uint32_t digitsG2     = static_cast<uint32_t>(params_CUDA[5]);
     const uint32_t RGSW_size    = digitsG2 * 2 * NHalf;
     const int32_t gBits         = static_cast<int32_t>(log2(static_cast<double>(baseG)));
     const int32_t gBitsMaxBits  = 64 - gBits;
@@ -430,25 +429,25 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
 template<class FFT, class IFFT>
 __launch_bounds__(FFT::max_threads_per_block)
 __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
-        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, uint64_t* params_CUDA, Complex_d* GINX_bootstrappingKey_CUDA){
+        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA){
     
     /* GPU Parameters Set */
     uint32_t tid = ThisThreadRankInBlock();
     uint32_t bdim = ThisBlockSize();
 
     /* HE Parameters Set */
-    const uint32_t M            = static_cast<uint32_t>(params_CUDA[0] << 1);
-    const uint32_t N            = static_cast<uint32_t>(params_CUDA[0]);
+    const uint32_t n            = static_cast<uint32_t>(params_CUDA[0]);
+    const uint32_t M            = static_cast<uint32_t>(params_CUDA[1] << 1);
+    const uint32_t N            = static_cast<uint32_t>(params_CUDA[1]);
     const uint32_t NHalf        = N >> 1;
-    const uint32_t n            = static_cast<uint32_t>(params_CUDA[1]);
-    const uint64_t Q            = params_CUDA[2];
+    const uint64_t Q            = params_CUDA[3];
     const uint64_t QHalf        = Q >> 1;
-    const uint32_t digitsG2     = static_cast<uint32_t>(params_CUDA[3]);
     const uint32_t baseG        = static_cast<uint32_t>(params_CUDA[4]);
+    const uint32_t digitsG2     = static_cast<uint32_t>(params_CUDA[5]);
     const uint32_t RGSW_size    = digitsG2 * 2 * NHalf;
     const int32_t gBits         = static_cast<int32_t>(log2(static_cast<double>(baseG)));
     const int32_t gBitsMaxBits  = 64 - gBits;
-    const uint32_t syncNum      = static_cast<uint32_t>(params_CUDA[5]); // number of synchronization (cufftdx)
+    const uint32_t syncNum      = static_cast<uint32_t>(params_CUDA[9]); // number of synchronization (cufftdx)
 
     /* cufftdx variables */
     using complex_type = typename FFT::value_type;
@@ -1295,18 +1294,21 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     const std::shared_ptr<RingGSWCryptoParams> RGSWParams, LWESwitchingKey keySwitchingKey, const std::shared_ptr<LWECryptoParams> LWEParams)
 {
     /* Parameters Set */
-    auto Q            = RGSWParams->GetQ();
-    NativeInteger QHalf = Q >> 1;
-    NativeInteger::SignedNativeInt Q_int = Q.ConvertToInt();
-    uint32_t N            = RGSWParams->GetN();
-    uint32_t NHalf     = N >> 1;
-    uint32_t n = (*GINX_bootstrappingKey_FFT)[0][0].size();
-    uint32_t digitsG2 = RGSWParams->GetDigitsG() << 1;
-    uint32_t baseG = RGSWParams->GetBaseG();
-    uint32_t RGSW_size = digitsG2 * 2 * NHalf;
-    NativeInteger qKS = LWEParams->GetqKS();
-    uint32_t baseKS   = LWEParams->GetBaseKS();
-    uint32_t digitCountKS = (uint32_t)std::ceil(log(qKS.ConvertToDouble()) / log(static_cast<double>(baseKS)));
+    NativeInteger Q             = RGSWParams->GetQ();
+    NativeInteger QHalf         = Q >> 1;
+    int64_t Q_int               = Q.ConvertToInt();
+    NativeInteger q             = LWEParams->Getq();
+    int64_t q_int               = q.ConvertToInt();
+    uint32_t N                  = RGSWParams->GetN();
+    uint32_t NHalf              = N >> 1;
+    uint32_t n                  = (*GINX_bootstrappingKey_FFT)[0][0].size();
+    uint32_t digitsG2           = RGSWParams->GetDigitsG() << 1;
+    uint32_t baseG              = RGSWParams->GetBaseG();
+    uint32_t RGSW_size          = digitsG2 * 2 * NHalf;
+    NativeInteger qKS           = LWEParams->GetqKS();
+    int64_t qKS_int             = qKS.ConvertToInt();
+    uint32_t baseKS             = LWEParams->GetBaseKS();
+    uint32_t digitCountKS       = (uint32_t)std::ceil(log(qKS.ConvertToDouble()) / log(static_cast<double>(baseKS)));
 
     int SM_count = gpuInfoList[0].multiprocessorCount;
 
@@ -1390,22 +1392,25 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
 
     /* Initialize params_CUDA */
     uint64_t *paramters;
-    cudaMallocHost((void**)&paramters, 6 * sizeof(uint64_t));
-    paramters[0] = N;
-    paramters[1] = n;
-    paramters[2] = static_cast<uint64_t>(Q_int);
-    paramters[3] = digitsG2;
+    cudaMallocHost((void**)&paramters, 10 * sizeof(uint64_t));
+    paramters[0] = n;
+    paramters[1] = N;
+    paramters[2] = q_int;
+    paramters[3] = Q_int;
     paramters[4] = baseG;
+    paramters[5] = digitsG2;
+    paramters[6] = qKS_int;
+    paramters[7] = baseKS;
+    paramters[8] = digitCountKS;
     auto it = synchronizationMap.find({arch, FFT_dimension});
     if (it != synchronizationMap.end() && it->second != 0) {
-        paramters[5] = static_cast<uint64_t>(it->second);
+        paramters[9] = static_cast<uint64_t>(it->second);
     } else {
         std::cerr << "Hasn't tested on this GPU yet, please contact r11922138@ntu.edu.tw" << std::endl;
         exit(1);
     }
     // Bring params_CUDA to GPU
-    cudaMalloc(&params_CUDA, 6 * sizeof(uint64_t));
-    cudaMemcpy(params_CUDA, paramters, 6 * sizeof(uint64_t), cudaMemcpyHostToDevice);
+    cudaMemcpyToSymbol(params_CUDA, paramters, 10 * sizeof(uint64_t));
     cudaFreeHost(paramters);
 
     /* Initialize bootstrapping key */
@@ -1930,7 +1935,7 @@ void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const 
 template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
 void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d, std::string mode)
 {   
-    /* parameters set */
+    /* HE parameters set */
     auto mod                = a.GetModulus();
     uint32_t modInt         = mod.ConvertToInt();
     auto Q                  = params->GetQ();
@@ -1995,11 +2000,11 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     /* Launch boostrapping kernel */
     if(mode == "SINGLE"){
         bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size>>>
-            (acc_CUDA, ct_CUDA, dct_CUDA, a_CUDA, monomial_CUDA, twiddleTable_CUDA, params_CUDA, GINX_bootstrappingKey_CUDA);
+            (acc_CUDA, ct_CUDA, dct_CUDA, a_CUDA, monomial_CUDA, twiddleTable_CUDA, GINX_bootstrappingKey_CUDA);
     }
     else if(mode == "MULTI"){
         void *kernelArgs[] = {(void *)&acc_CUDA, (void *)&ct_CUDA, (void *)&dct_CUDA, (void *)&a_CUDA, 
-            (void *)&monomial_CUDA, (void *)&twiddleTable_CUDA, (void *)&params_CUDA, (void *)&GINX_bootstrappingKey_CUDA};
+            (void *)&monomial_CUDA, (void *)&twiddleTable_CUDA, (void *)&GINX_bootstrappingKey_CUDA};
         cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT_multi, IFFT_multi>), digitsG2/2, FFT_multi::block_dim, kernelArgs, FFT_multi::shared_memory_size);
     }
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
@@ -2446,7 +2451,7 @@ template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
 void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
         std::vector<std::vector<std::vector<Complex>>>& acc_d, std::string mode)
 {   
-    /* parameters set */
+    /* HE parameters set */
     auto mod                = a[0].GetModulus();
     uint32_t modInt         = mod.ConvertToInt();
     auto Q                  = params->GetQ();
@@ -2519,7 +2524,7 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
             cudaMemcpyAsync(acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, streams[s % SM_count]);
             bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size, streams[s % SM_count]>>>
                 (acc_CUDA + (s % SM_count)*2*NHalf, ct_CUDA + (s % SM_count)*2*NHalf, dct_CUDA + (s % SM_count)*digitsG2*NHalf, a_CUDA + (s % SM_count)*n, 
-                monomial_CUDA, twiddleTable_CUDA, params_CUDA, GINX_bootstrappingKey_CUDA);
+                monomial_CUDA, twiddleTable_CUDA, GINX_bootstrappingKey_CUDA);
             cudaMemcpyAsync(acc_d_arr + s*2*NHalf, acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, streams[s % SM_count]);
         }
     }
@@ -2534,7 +2539,7 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
             cudaMemcpyAsync(a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[s % SM_count]);
             cudaMemcpyAsync(acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, streams[s % SM_count]);
             void *kernelArgs[] = {(void *)&acc_CUDA_offset, (void *)&ct_CUDA_offset, (void *)&dct_CUDA_offset, (void *)&a_CUDA_offset, 
-                (void *)&monomial_CUDA, (void *)&twiddleTable_CUDA, (void *)&params_CUDA, (void *)&GINX_bootstrappingKey_CUDA};
+                (void *)&monomial_CUDA, (void *)&twiddleTable_CUDA, (void *)&GINX_bootstrappingKey_CUDA};
             cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT_multi, IFFT_multi>), digitsG2/2, FFT_multi::block_dim, 
                 kernelArgs, FFT_multi::shared_memory_size, streams[s % SM_count]);
             cudaMemcpyAsync(acc_d_arr + s*2*NHalf, acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, streams[s % SM_count]);
@@ -2546,7 +2551,7 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    std::cout << bootstrap_num << " Bootstrapping GPU time : " << milliseconds << " ms\n";
+    std::cout << bootstrap_num << "AddToAccCGGI_CUDA_core GPU time : " << milliseconds << " ms\n";
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 
@@ -2565,37 +2570,14 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     cudaFreeHost(acc_d_arr);
 }
 
-void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ctExt, NativeInteger Q1, NativeInteger Q2)
+void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ctExt, NativeInteger fmod)
 {
-    /* parameters set */
-    uint32_t n        = params->Getn();
-    uint32_t N        = params->GetN();
-    NativeInteger q   = params->Getq().ConvertToInt();
-    int64_t q_int = q.ConvertToInt();
-    NativeInteger Q   = params->GetQ().ConvertToInt();
-    int64_t Q_int = Q.ConvertToInt();
-    uint32_t baseKS   = params->GetBaseKS();
-    uint32_t digitCountKS = (uint32_t)std::ceil(log(Q1.ConvertToDouble()) / log(static_cast<double>(baseKS)));
+    /* HE parameters set */
+    uint32_t n              = params->Getn();
+    uint32_t N              = params->GetN();
     
     int bootstrap_num = ctExt->size();
     int SM_count = gpuInfoList[0].multiprocessorCount;
-
-    /* Initialize paramsMKM_CUDA */
-    uint64_t *paramters;
-    cudaMallocHost((void**)&paramters, 8 * sizeof(uint64_t));
-    paramters[0] = n;
-    paramters[1] = N;
-    paramters[2] = static_cast<uint64_t>(q_int);
-    paramters[3] = static_cast<uint64_t>(Q_int);
-    paramters[4] = baseKS;
-    paramters[5] = digitCountKS;
-    paramters[6] = static_cast<uint64_t>(Q1.ConvertToInt());
-    paramters[7] = static_cast<uint64_t>(Q2.ConvertToInt());
-    // Bring paramsMKM_CUDA to GPU
-    uint64_t *paramsMKM_CUDA;
-    cudaMalloc(&paramsMKM_CUDA, 8 * sizeof(uint64_t));
-    cudaMemcpy(paramsMKM_CUDA, paramters, 8 * sizeof(uint64_t), cudaMemcpyHostToDevice);
-    cudaFreeHost(paramters);
 
     /* Initialize ctExt_host */
     uint64_t* ctExt_host;
@@ -2616,7 +2598,8 @@ void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_p
 
     for (int s = 0; s < bootstrap_num; s++) {
         cudaMemcpyAsync(ctExt_CUDA + (s % SM_count)*(N + 1), ctExt_host + s*(N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[s % SM_count]);
-        MKMSwitchKernel<<<1, 768, (N + 1) * sizeof(uint64_t), streams[s % SM_count]>>>(ctExt_CUDA + (s % SM_count)*(N + 1), keySwitchingkey_CUDA, paramsMKM_CUDA);
+        MKMSwitchKernel<<<1, 768, (N + 1) * sizeof(uint64_t), streams[s % SM_count]>>>
+            (ctExt_CUDA + (s % SM_count)*(N + 1), keySwitchingkey_CUDA, static_cast<uint64_t>(fmod.ConvertToInt()));
         cudaMemcpyAsync(ctExt_host + s*(N + 1), ctExt_CUDA + (s % SM_count)*(N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyDeviceToHost, streams[s % SM_count]);
     }
     // CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
@@ -2625,14 +2608,14 @@ void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_p
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
-    std::cout << bootstrap_num << " MKMSwitching GPU time : " << milliseconds << " ms\n";
+    std::cout << bootstrap_num << "MKMSwitching GPU time : " << milliseconds << " ms\n";
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 
     /* Copy ctExt_host back to ctExt */
     for (int s = 0; s < bootstrap_num; s++){
         // A
-        NativeVector a(n, Q2);
+        NativeVector a(n, fmod);
         for(int i = 0; i < n; i++)
             a[i] = ctExt_host[s*(N + 1) + i];
         // B

@@ -100,8 +100,7 @@ public:
    * @param Q1 First modulus to switch to
    * @param Q2 Second modulus to switch to
    */
-    virtual void MKMSwitch(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ct,
-                         NativeInteger Q1, NativeInteger Q2) const {
+    virtual void MKMSwitch(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ct, NativeInteger fmod) const {
         OPENFHE_THROW(not_implemented_error, "ACC operation not supported");
     }
 

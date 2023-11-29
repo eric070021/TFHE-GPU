@@ -89,8 +89,7 @@ public:
    * @param Q1 First modulus to switch to
    * @param Q2 Second modulus to switch to
    */
-    void MKMSwitch(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ct,
-                         NativeInteger Q1, NativeInteger Q2) const override;
+    void MKMSwitch(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ct, NativeInteger fmod) const override;
 
 private:
     RingGSWEvalKey KeyGenCGGI(const std::shared_ptr<RingGSWCryptoParams> params, const NativePoly& skNTT,

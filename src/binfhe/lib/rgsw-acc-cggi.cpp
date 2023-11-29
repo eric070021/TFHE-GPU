@@ -148,12 +148,12 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
     // uint32_t M      = 2 * params->GetN();
     // uint32_t modInt = mod.ConvertToInt();
 
-    // fft-based blind rotation
-    NativeInteger Q   = params->GetQ();
-    NativeInteger QHalf = Q >> 1;
-    NativeInteger::SignedNativeInt Q_int = Q.ConvertToInt();
-    auto N         = params->GetN();
-    auto polyParams  = params->GetPolyParams();
+    /* HE parameters set */
+    NativeInteger Q                         = params->GetQ();
+    NativeInteger QHalf                     = Q >> 1;
+    NativeInteger::SignedNativeInt Q_int    = Q.ConvertToInt();
+    uint32_t  N                             = params->GetN();
+    auto polyParams                         = params->GetPolyParams();
 
     // cast acc to BasicFloat
     NativePoly acc0(acc->GetElements()[0]), acc1(acc->GetElements()[1]);
@@ -229,12 +229,12 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
 void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, 
         std::shared_ptr<std::vector<RLWECiphertext>> acc, const std::vector<NativeVector>& a) const {
 
-    // fft-based blind rotation
-    NativeInteger Q   = params->GetQ();
-    NativeInteger QHalf = Q >> 1;
-    NativeInteger::SignedNativeInt Q_int = Q.ConvertToInt();
-    auto N         = params->GetN();
-    auto polyParams  = params->GetPolyParams();
+    /* HE parameters set */
+    NativeInteger Q                         = params->GetQ();
+    NativeInteger QHalf                     = Q >> 1;
+    NativeInteger::SignedNativeInt Q_int    = Q.ConvertToInt();
+    uint32_t  N                             = params->GetN();
+    auto polyParams                         = params->GetPolyParams();
 
     std::vector<std::vector<std::vector<Complex>>> acc_d_vec (acc->size(), std::vector<std::vector<Complex>>(2, std::vector<Complex>(N, Complex(0.0, 0.0))));
 
@@ -250,7 +250,7 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
         }
     }
 
-    AddToAccCGGI_CUDA(params, a, acc_d_vec, "SINGLE");
+    AddToAccCGGI_CUDA(params, a, acc_d_vec, "MULTI");
 
     //cast acc_d_vec back to NativePoly
     for (uint32_t count = 0; count < acc->size(); count++){
@@ -271,8 +271,8 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
 
 
 void RingGSWAccumulatorCGGI::MKMSwitch(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ctExt,
-                         NativeInteger Q1, NativeInteger Q2) const{
-    MKMSwitch_CUDA(params, ctExt, Q1, Q2);
+                         NativeInteger fmod) const{
+    MKMSwitch_CUDA(params, ctExt, fmod);
 }
 
 // Encryption for the CGGI variant, as described in https://eprint.iacr.org/2020/086

@@ -49,25 +49,27 @@ Complex_d* monomial_CUDA;
 Complex_d* twiddleTable_CUDA;
 Complex_d* ct_CUDA;
 Complex_d* dct_CUDA;
-uint64_t* params_CUDA;
 Complex_d* acc_CUDA;
 uint64_t* a_CUDA;
 uint64_t* ctExt_CUDA;
 
+/* GPU Constant memory */
+__constant__ uint64_t params_CUDA[10];
+
 /* Multiple small thread blocks mode bootstrapping */
 template<class FFT, class IFFT>
-__global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, uint64_t* params_CUDA, Complex_d* GINX_bootstrappingKey_CUDA);
+__global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA);
 
 /* Single Big thread blocks mode bootstrapping */
 template<class FFT, class IFFT>
-__global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, uint64_t* params_CUDA, Complex_d* GINX_bootstrappingKey_CUDA);
+__global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA);
 
 /* cufftdx forward function to preprocess BTKey and monomial */
 template<class FFT>
 __global__ void cuFFTDxFWD(Complex_d* data, Complex_d* twiddleTable_CUDA);
 
 /* Modswitch, Keyswitch, and  Modswitch kernel*/
-__global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_CUDA, uint64_t *paramsMKM_CUDA);
+__global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_CUDA, uint64_t fmod);
 
 };  // namespace lbcrypto
 
@@ -150,7 +152,7 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
 *  Modswitch, Keyswitch, and Modswitch combo
 ****************************************/
 void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ctExt,
-                         NativeInteger Q1, NativeInteger Q2);
+                         NativeInteger fmod);
 
 };  // namespace lbcrypto
 
