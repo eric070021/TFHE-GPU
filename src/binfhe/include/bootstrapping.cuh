@@ -39,37 +39,40 @@ struct GPUInfo {
 /* Vector used to store multiple GPUs INFO */
 std::vector<GPUInfo> gpuInfoList;
 
-/* CUDA streams for parallel bootstrapping */
-std::vector<cudaStream_t> streams;
+/* Struct of these GPU pointers */
+struct GPUPointer {
+    Complex_d* GINX_bootstrappingKey_CUDA;
+    uint64_t* keySwitchingkey_CUDA;
+    Complex_d* monomial_CUDA;
+    Complex_d* twiddleTable_CUDA;
+    uint64_t* params_CUDA;
+    Complex_d* ct_CUDA;
+    Complex_d* dct_CUDA;
+    Complex_d* acc_CUDA;
+    uint64_t* a_CUDA;
+    uint64_t* ctExt_CUDA;
+    std::vector<cudaStream_t> streams; /* CUDA streams for parallel bootstrapping */
+};
 
-/* Pointers point to GPU global memory */
-Complex_d* GINX_bootstrappingKey_CUDA;
-uint64_t* keySwitchingkey_CUDA;
-Complex_d* monomial_CUDA;
-Complex_d* twiddleTable_CUDA;
-Complex_d* ct_CUDA;
-Complex_d* dct_CUDA;
-Complex_d* acc_CUDA;
-uint64_t* a_CUDA;
-uint64_t* ctExt_CUDA;
-
-/* GPU Constant memory */
-__constant__ uint64_t params_CUDA[10];
+/* Vector used to store multiple GPUs Pointers */
+std::vector<GPUPointer> GPUVec;
 
 /* Multiple small thread blocks mode bootstrapping */
 template<class FFT, class IFFT>
-__global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA);
+__global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
+        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* params_CUDA);
 
 /* Single Big thread blocks mode bootstrapping */
 template<class FFT, class IFFT>
-__global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA);
+__global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
+        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* params_CUDA);
 
 /* cufftdx forward function to preprocess BTKey and monomial */
 template<class FFT>
 __global__ void cuFFTDxFWD(Complex_d* data, Complex_d* twiddleTable_CUDA);
 
 /* Modswitch, Keyswitch, and  Modswitch kernel*/
-__global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_CUDA, uint64_t fmod);
+__global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_CUDA, uint64_t* params_CUDA, uint64_t fmod);
 
 };  // namespace lbcrypto
 
@@ -79,6 +82,7 @@ __global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_
 #include <vector>
 #include <map>
 #include <string>
+#include <chrono>
 #include "rgsw-cryptoparameters.h"
 #include "lwe-cryptoparameters.h"
 #include "math/dftransform.h"

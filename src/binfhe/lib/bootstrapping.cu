@@ -26,7 +26,7 @@ __device__ inline uint64_t RoundqQ_CUDA(const uint64_t &v, const uint64_t &q, co
     return static_cast<uint64_t>(floor(0.5 + static_cast<double>(v) * static_cast<double>(q) / static_cast<double>(Q))) % q;
 }
 
-__global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_CUDA, uint64_t fmod){
+__global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_CUDA, uint64_t* params_CUDA, uint64_t fmod){
     /* GPU Parameters Set */
     uint32_t tid = ThisThreadRankInBlock();
     uint32_t bdim = ThisBlockSize();
@@ -76,7 +76,7 @@ __global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_
 template<class FFT, class IFFT>
 __launch_bounds__(FFT::max_threads_per_block)
 __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
-        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA){
+        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* params_CUDA){
     
     /* GPU Parameters Set */
     cg::grid_group grid = cg::this_grid();
@@ -429,7 +429,7 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
 template<class FFT, class IFFT>
 __launch_bounds__(FFT::max_threads_per_block)
 __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
-        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA){
+        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* params_CUDA){
     
     /* GPU Parameters Set */
     uint32_t tid = ThisThreadRankInBlock();
@@ -1293,7 +1293,7 @@ template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
 void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> GINX_bootstrappingKey_FFT, 
     const std::shared_ptr<RingGSWCryptoParams> RGSWParams, LWESwitchingKey keySwitchingKey, const std::shared_ptr<LWECryptoParams> LWEParams)
 {
-    /* Parameters Set */
+    /* HE Parameters Set */
     NativeInteger Q             = RGSWParams->GetQ();
     NativeInteger QHalf         = Q >> 1;
     int64_t Q_int               = Q.ConvertToInt();
@@ -1301,7 +1301,7 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     int64_t q_int               = q.ConvertToInt();
     uint32_t N                  = RGSWParams->GetN();
     uint32_t NHalf              = N >> 1;
-    uint32_t n                  = (*GINX_bootstrappingKey_FFT)[0][0].size();
+    uint32_t n                  = LWEParams->Getn();
     uint32_t digitsG2           = RGSWParams->GetDigitsG() << 1;
     uint32_t baseG              = RGSWParams->GetBaseG();
     uint32_t RGSW_size          = digitsG2 * 2 * NHalf;
@@ -1310,71 +1310,7 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     uint32_t baseKS             = LWEParams->GetBaseKS();
     uint32_t digitCountKS       = (uint32_t)std::ceil(log(qKS.ConvertToDouble()) / log(static_cast<double>(baseKS)));
 
-    int SM_count = gpuInfoList[0].multiprocessorCount;
-
-    /* Create cuda streams */
-    streams.resize(gpuInfoList[0].multiprocessorCount);
-    for (int s = 0; s < gpuInfoList[0].multiprocessorCount; s++) {
-        cudaStreamCreate(&streams[s]);
-    }
-
-    /* Configure cuFFTDx */
-    using FFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() + cufftdx::ElementsPerThread<8>() +
-                        cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<FFT_num>() + cufftdx::SM<arch>());
-
-    using IFFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() + cufftdx::ElementsPerThread<8>() +
-                            cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
-
-    using FFT_multi      = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() +
-                            cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
-
-    using IFFT_multi     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() +
-                            cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
-
-    using FFT_fwd  = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() + cufftdx::ElementsPerThread<8>() +
-                        cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<1>() + cufftdx::SM<arch>());
-
-    /* Increase max shared memory */
-    // Single block Bootstrapping shared memory size
-    if(FFT::shared_memory_size > 65536){
-        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 100));
-    }
-    else if(FFT::shared_memory_size > 32768){
-        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
-    }
-    else{
-        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 32));
-    }
-    CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size));
-
-    // Multi block Bootstrapping shared memory size
-    if(FFT_multi::shared_memory_size > 65536){
-        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 100));
-    }
-    else if(FFT_multi::shared_memory_size > 32768){
-        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
-    }
-    else{
-        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 32));
-    }
-    CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_multi::shared_memory_size));
-
-    // MKMSwitch shared memory size
-    int MKMSwitch_shared_memory_size = (N + 1) * sizeof(uint64_t);
-    if(MKMSwitch_shared_memory_size > 65536){
-        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 100));
-    }
-    else if(MKMSwitch_shared_memory_size > 32768){
-        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
-    }
-    else{
-        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 32));
-    }
-    CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributeMaxDynamicSharedMemorySize, MKMSwitch_shared_memory_size));
-
-    // cuFFTDx Forward shared memory size
-    CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(cuFFTDxFWD<FFT_fwd>, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
-    CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(cuFFTDxFWD<FFT_fwd>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_fwd::shared_memory_size));
+    int GPU_num  = gpuInfoList.size();
 
     /* Initialize twiddle table */
     Complex *twiddleTable;
@@ -1385,10 +1321,6 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     for (size_t j = NHalf; j < N; j++) {
         twiddleTable[j] = Complex(cos(static_cast<double>(-2 * M_PI * (j - NHalf)) / (N << 1)), sin(static_cast<double>(-2 * M_PI * (j - NHalf)) / (N << 1)));
     }
-    // Bring twiddle table to GPU
-    cudaMalloc(&twiddleTable_CUDA, 2 * NHalf * sizeof(Complex_d));
-    cudaMemcpy(twiddleTable_CUDA, twiddleTable, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice);
-    cudaFreeHost(twiddleTable);
 
     /* Initialize params_CUDA */
     uint64_t *paramters;
@@ -1409,9 +1341,6 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
         std::cerr << "Hasn't tested on this GPU yet, please contact r11922138@ntu.edu.tw" << std::endl;
         exit(1);
     }
-    // Bring params_CUDA to GPU
-    cudaMemcpyToSymbol(params_CUDA, paramters, 10 * sizeof(uint64_t));
-    cudaFreeHost(paramters);
 
     /* Initialize bootstrapping key */
     Complex *bootstrappingKey;
@@ -1429,12 +1358,6 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
             }
         }
     }
-    // Bring bootstrapping key to GPU
-    cudaMalloc(&GINX_bootstrappingKey_CUDA, 2 * n * RGSW_size * sizeof(Complex_d));
-    cudaMemcpy(GINX_bootstrappingKey_CUDA, bootstrappingKey, 2 * n * RGSW_size * sizeof(Complex_d), cudaMemcpyHostToDevice);
-    cudaFreeHost(bootstrappingKey);
-    cuFFTDxFWD<FFT_fwd><<<2 * n * digitsG2 * 2, FFT_fwd::block_dim, FFT_fwd::shared_memory_size>>>(GINX_bootstrappingKey_CUDA, twiddleTable_CUDA);
-    cudaDeviceSynchronize();
 
     /* Initialize keySwitching key */
     uint64_t *keySwitchingkey_host;
@@ -1451,10 +1374,6 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
             }
         }
     }
-    // Bring keySwitching key to GPU
-    cudaMalloc(&keySwitchingkey_CUDA, N * baseKS * digitCountKS * (n + 1) * sizeof(uint64_t));
-    cudaMemcpy(keySwitchingkey_CUDA, keySwitchingkey_host, N * baseKS * digitCountKS * (n + 1) * sizeof(uint64_t), cudaMemcpyHostToDevice);
-    cudaFreeHost(keySwitchingkey_host);
 
     /* Initialize monomial array */
     Complex *monomial_arr;
@@ -1483,27 +1402,129 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
         for (size_t i = 0; i < NHalf; ++i) 
             monomial_arr[m_count*NHalf + i] = Complex(monomialNeg[i].real(), monomialNeg[i + NHalf].real());
     }
-    // Bring monomial array to GPU
-    cudaMalloc(&monomial_CUDA, 2 * N * NHalf * sizeof(Complex_d));
-    cudaMemcpy(monomial_CUDA, monomial_arr, 2 * N * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice);
+
+    /* Allocate memory and send to multiple GPUs */
+    GPUVec.resize(GPU_num);
+    for(int g = 0; g < GPU_num; g++){
+        /* Set device */
+        cudaSetDevice(g);
+        
+        /* Configure cuFFTDx */
+        using FFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() + cufftdx::ElementsPerThread<8>() +
+                            cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<FFT_num>() + cufftdx::SM<arch>());
+
+        using IFFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() + cufftdx::ElementsPerThread<8>() +
+                                cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
+
+        using FFT_multi      = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() +
+                                cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
+
+        using IFFT_multi     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() +
+                                cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
+
+        using FFT_fwd  = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() + cufftdx::ElementsPerThread<8>() +
+                            cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<1>() + cufftdx::SM<arch>());
+
+        /* Increase max shared memory */
+        // Single block Bootstrapping shared memory size
+        if(FFT::shared_memory_size > 65536){
+            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 100));
+        }
+        else if(FFT::shared_memory_size > 32768){
+            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
+        }
+        else{
+            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 32));
+        }
+        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size));
+
+        // Multi block Bootstrapping shared memory size
+        if(FFT_multi::shared_memory_size > 65536){
+            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 100));
+        }
+        else if(FFT_multi::shared_memory_size > 32768){
+            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
+        }
+        else{
+            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 32));
+        }
+        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_multi::shared_memory_size));
+
+        // MKMSwitch shared memory size
+        int MKMSwitch_shared_memory_size = (N + 1) * sizeof(uint64_t);
+        if(MKMSwitch_shared_memory_size > 65536){
+            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 100));
+        }
+        else if(MKMSwitch_shared_memory_size > 32768){
+            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
+        }
+        else{
+            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 32));
+        }
+        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributeMaxDynamicSharedMemorySize, MKMSwitch_shared_memory_size));
+
+        // cuFFTDx Forward shared memory size
+        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(cuFFTDxFWD<FFT_fwd>, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
+        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(cuFFTDxFWD<FFT_fwd>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_fwd::shared_memory_size));
+
+        int SM_count = gpuInfoList[g].multiprocessorCount;
+
+        /* Create cuda streams */
+        GPUVec[g].streams.resize(SM_count);
+        for (int s = 0; s < SM_count; s++) {
+            cudaStreamCreate(&GPUVec[g].streams[s]);
+        }
+
+        // Bring twiddle table to GPU
+        cudaMalloc(&GPUVec[g].twiddleTable_CUDA, 2 * NHalf * sizeof(Complex_d));
+        cudaMemcpy(GPUVec[g].twiddleTable_CUDA, twiddleTable, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice);
+
+        // Bring params_CUDA to GPU
+        cudaMalloc(&GPUVec[g].params_CUDA, 10 * sizeof(uint64_t));
+        cudaMemcpy(GPUVec[g].params_CUDA, paramters, 10 * sizeof(uint64_t), cudaMemcpyHostToDevice);
+
+        // Bring bootstrapping key to GPU
+        cudaMalloc(&GPUVec[g].GINX_bootstrappingKey_CUDA, 2 * n * RGSW_size * sizeof(Complex_d));
+        cudaMemcpy(GPUVec[g].GINX_bootstrappingKey_CUDA, bootstrappingKey, 2 * n * RGSW_size * sizeof(Complex_d), cudaMemcpyHostToDevice);
+        cuFFTDxFWD<FFT_fwd><<<2 * n * digitsG2 * 2, FFT_fwd::block_dim, FFT_fwd::shared_memory_size>>>(GPUVec[g].GINX_bootstrappingKey_CUDA, GPUVec[g].twiddleTable_CUDA);
+
+        // Bring keySwitching key to GPU
+        cudaMalloc(&GPUVec[g].keySwitchingkey_CUDA, N * baseKS * digitCountKS * (n + 1) * sizeof(uint64_t));
+        cudaMemcpy(GPUVec[g].keySwitchingkey_CUDA, keySwitchingkey_host, N * baseKS * digitCountKS * (n + 1) * sizeof(uint64_t), cudaMemcpyHostToDevice);
+
+        // Bring monomial array to GPU
+        cudaMalloc(&GPUVec[g].monomial_CUDA, 2 * N * NHalf * sizeof(Complex_d));
+        cudaMemcpy(GPUVec[g].monomial_CUDA, monomial_arr, 2 * N * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice);
+        cuFFTDxFWD<FFT_fwd><<<2 * N, FFT_fwd::block_dim, FFT_fwd::shared_memory_size>>>(GPUVec[g].monomial_CUDA, GPUVec[g].twiddleTable_CUDA);
+
+        /* Allocate ct_CUDA on GPU */
+        cudaMalloc(&GPUVec[g].ct_CUDA, SM_count * 2 * NHalf * sizeof(Complex_d));
+
+        /* Allocate dct_CUDA on GPU */
+        cudaMalloc(&GPUVec[g].dct_CUDA, SM_count * digitsG2 * NHalf * sizeof(Complex_d));
+
+        /* Allocate acc_CUDA on GPU */
+        cudaMalloc(&GPUVec[g].acc_CUDA, SM_count * 2 * NHalf * sizeof(Complex_d));
+
+        /* Allocate a_CUDA on GPU */
+        cudaMalloc(&GPUVec[g].a_CUDA, SM_count * n * sizeof(uint64_t));
+
+        /* Allocate ctExt_CUDA on GPU */
+        cudaMalloc(&GPUVec[g].ctExt_CUDA, SM_count * (N + 1) * sizeof(uint64_t));
+    }
+
+    /* Synchronize all GPUs */
+    for(int g = 0; g < GPU_num; g++){
+        cudaSetDevice(g);
+        cudaDeviceSynchronize();
+    }
+
+    /* Free all host memories */
+    cudaFreeHost(twiddleTable);
+    cudaFreeHost(paramters);
+    cudaFreeHost(bootstrappingKey);
+    cudaFreeHost(keySwitchingkey_host);
     cudaFreeHost(monomial_arr);
-    cuFFTDxFWD<FFT_fwd><<<2 * N, FFT_fwd::block_dim, FFT_fwd::shared_memory_size>>>(monomial_CUDA, twiddleTable_CUDA);
-    cudaDeviceSynchronize();
-
-    /* Allocate ct_CUDA on GPU */
-    cudaMalloc(&ct_CUDA, SM_count * 2 * NHalf * sizeof(Complex_d));
-
-    /* Allocate dct_CUDA on GPU */
-    cudaMalloc(&dct_CUDA, SM_count * digitsG2 * NHalf * sizeof(Complex_d));
-
-    /* Allocate acc_CUDA on GPU */
-    cudaMalloc(&acc_CUDA, SM_count * 2 * NHalf * sizeof(Complex_d));
-
-    /* Allocate a_CUDA on GPU */
-    cudaMalloc(&a_CUDA, SM_count * n * sizeof(uint64_t));
-
-    /* Allocate ctExt_CUDA on GPU */
-    cudaMalloc(&ctExt_CUDA, SM_count * (N + 1) * sizeof(uint64_t));
 }
 
 void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d, std::string mode)
@@ -1978,6 +1999,9 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
         }
     }
 
+    /* Set device */
+    cudaSetDevice(0);
+
     /* Initialize a_arr */
     uint64_t* a_arr;
     cudaMallocHost((void**)&a_arr, n * sizeof(uint64_t));
@@ -1985,7 +2009,7 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
         a_arr[i] = (mod.ModSub(a[i], mod) * (M / modInt)).ConvertToInt();
     }
     // Bring a to GPU
-    cudaMemcpy(a_CUDA, a_arr, n * sizeof(uint64_t), cudaMemcpyHostToDevice);
+    cudaMemcpy(GPUVec[0].a_CUDA, a_arr, n * sizeof(uint64_t), cudaMemcpyHostToDevice);
     cudaFreeHost(a_arr);
 
     /* Initialize acc_d_arr */
@@ -1995,23 +2019,24 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
         for(int j = 0; j < NHalf; j++)
             acc_d_arr[i*NHalf + j] = Complex(acc_d[i][j].real(), acc_d[i][j + NHalf].real());   
     // Bring acc_d to GPU
-    cudaMemcpy(acc_CUDA, acc_d_arr, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice);
+    cudaMemcpy(GPUVec[0].acc_CUDA, acc_d_arr, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice);
 
     /* Launch boostrapping kernel */
     if(mode == "SINGLE"){
         bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size>>>
-            (acc_CUDA, ct_CUDA, dct_CUDA, a_CUDA, monomial_CUDA, twiddleTable_CUDA, GINX_bootstrappingKey_CUDA);
+            (GPUVec[0].acc_CUDA, GPUVec[0].ct_CUDA, GPUVec[0].dct_CUDA, GPUVec[0].a_CUDA, 
+                GPUVec[0].monomial_CUDA, GPUVec[0].twiddleTable_CUDA, GPUVec[0].GINX_bootstrappingKey_CUDA, GPUVec[0].params_CUDA);
     }
     else if(mode == "MULTI"){
-        void *kernelArgs[] = {(void *)&acc_CUDA, (void *)&ct_CUDA, (void *)&dct_CUDA, (void *)&a_CUDA, 
-            (void *)&monomial_CUDA, (void *)&twiddleTable_CUDA, (void *)&GINX_bootstrappingKey_CUDA};
+        void *kernelArgs[] = {(void *)&GPUVec[0].acc_CUDA, (void *)&GPUVec[0].ct_CUDA, (void *)&GPUVec[0].dct_CUDA, (void *)&GPUVec[0].a_CUDA, 
+            (void *)&GPUVec[0].monomial_CUDA, (void *)&GPUVec[0].twiddleTable_CUDA, (void *)&GPUVec[0].GINX_bootstrappingKey_CUDA, (void *)&GPUVec[0].params_CUDA};
         cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT_multi, IFFT_multi>), digitsG2/2, FFT_multi::block_dim, kernelArgs, FFT_multi::shared_memory_size);
     }
     CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
     CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
 
     /* Copy acc_d_arr back to acc_d */
-    cudaMemcpy(acc_d_arr, acc_CUDA, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost);
+    cudaMemcpy(acc_d_arr, GPUVec[0].acc_CUDA, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost);
     for(int i = 0; i < 2; i++){
         for(int j = 0; j < NHalf; j++){
             acc_d[i][j] = Complex(acc_d_arr[i*NHalf + j].real(), 0);
@@ -2464,6 +2489,7 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     uint32_t digitsG2       = params->GetDigitsG() << 1;
 
     int bootstrap_num       = acc_d.size();
+    int GPU_num             = gpuInfoList.size();
     int SM_count            = gpuInfoList[0].multiprocessorCount;
 
     /* Configure cuFFTDx */
@@ -2512,48 +2538,53 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
             for(int j = 0; j < NHalf; j++)
                 acc_d_arr[s*2*NHalf + i*NHalf + j] = Complex(acc_d[s][i][j].real(), acc_d[s][i][j + NHalf].real());
 
-    /* Measure GPU bootstrapping time */
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start);
+    auto start = std::chrono::high_resolution_clock::now();
 
     if(mode == "SINGLE"){
         for (int s = 0; s < bootstrap_num; s++) {
-            cudaMemcpyAsync(a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[s % SM_count]);
-            cudaMemcpyAsync(acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, streams[s % SM_count]);
-            bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size, streams[s % SM_count]>>>
-                (acc_CUDA + (s % SM_count)*2*NHalf, ct_CUDA + (s % SM_count)*2*NHalf, dct_CUDA + (s % SM_count)*digitsG2*NHalf, a_CUDA + (s % SM_count)*n, 
-                monomial_CUDA, twiddleTable_CUDA, GINX_bootstrappingKey_CUDA);
-            cudaMemcpyAsync(acc_d_arr + s*2*NHalf, acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, streams[s % SM_count]);
+            int currentGPU = (s / SM_count) % GPU_num;
+            if(s % SM_count == 0){
+                cudaSetDevice(currentGPU);
+            }
+            cudaMemcpyAsync(GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+            cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+            bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size, GPUVec[currentGPU].streams[s % SM_count]>>>
+                (GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].ct_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].dct_CUDA + (s % SM_count)*digitsG2*NHalf,
+                    GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, GPUVec[currentGPU].monomial_CUDA, GPUVec[currentGPU].twiddleTable_CUDA, GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, GPUVec[currentGPU].params_CUDA);
+            cudaMemcpyAsync(acc_d_arr + s*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
         }
     }
     else if(mode == "MULTI"){
         Complex_d* acc_CUDA_offset, *ct_CUDA_offset, *dct_CUDA_offset;
         uint64_t* a_CUDA_offset;
         for (int s = 0; s < bootstrap_num; s++) {
-            acc_CUDA_offset = acc_CUDA + (s % SM_count)*2*NHalf;
-            ct_CUDA_offset = ct_CUDA + (s % SM_count)*2*NHalf;
-            dct_CUDA_offset = dct_CUDA + (s % SM_count)*digitsG2*NHalf;
-            a_CUDA_offset = a_CUDA + (s % SM_count)*n;
-            cudaMemcpyAsync(a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[s % SM_count]);
-            cudaMemcpyAsync(acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, streams[s % SM_count]);
+            int currentGPU = (s / SM_count) % GPU_num;
+            if(s % SM_count == 0){
+                cudaSetDevice(currentGPU);
+            }
+            acc_CUDA_offset = GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf;
+            ct_CUDA_offset = GPUVec[currentGPU].ct_CUDA + (s % SM_count)*2*NHalf;
+            dct_CUDA_offset = GPUVec[currentGPU].dct_CUDA + (s % SM_count)*digitsG2*NHalf;
+            a_CUDA_offset = GPUVec[currentGPU].a_CUDA + (s % SM_count)*n;
+            cudaMemcpyAsync(GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+            cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
             void *kernelArgs[] = {(void *)&acc_CUDA_offset, (void *)&ct_CUDA_offset, (void *)&dct_CUDA_offset, (void *)&a_CUDA_offset, 
-                (void *)&monomial_CUDA, (void *)&twiddleTable_CUDA, (void *)&GINX_bootstrappingKey_CUDA};
+                (void *)&GPUVec[currentGPU].monomial_CUDA, (void *)&GPUVec[currentGPU].twiddleTable_CUDA, (void *)&GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, (void *)&GPUVec[currentGPU].params_CUDA};
             cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT_multi, IFFT_multi>), digitsG2/2, FFT_multi::block_dim, 
-                kernelArgs, FFT_multi::shared_memory_size, streams[s % SM_count]);
-            cudaMemcpyAsync(acc_d_arr + s*2*NHalf, acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, streams[s % SM_count]);
+                kernelArgs, FFT_multi::shared_memory_size, GPUVec[currentGPU].streams[s % SM_count]);
+            cudaMemcpyAsync(acc_d_arr + s*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
         }
     }
-    // CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
-    // CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
-    float milliseconds = 0;
-    cudaEventElapsedTime(&milliseconds, start, stop);
-    std::cout << bootstrap_num << "AddToAccCGGI_CUDA_core GPU time : " << milliseconds << " ms\n";
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+
+    /* Synchronize all GPUs */
+    for(int g = 0; g < GPU_num; g++){
+        cudaSetDevice(g);
+        CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+        CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
+    std::cout << bootstrap_num << "AddToAccCGGI_CUDA_core GPU time : " << elapsed.count() << " ms" << std::endl;
 
     /* Copy acc_d_arr back to acc_d */
     for (int s = 0; s < bootstrap_num; s++) {
@@ -2577,6 +2608,7 @@ void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_p
     uint32_t N              = params->GetN();
     
     int bootstrap_num = ctExt->size();
+    int GPU_num             = gpuInfoList.size();
     int SM_count = gpuInfoList[0].multiprocessorCount;
 
     /* Initialize ctExt_host */
@@ -2590,27 +2622,28 @@ void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_p
         ctExt_host[s*(N + 1) + N] = static_cast<uint64_t>((*ctExt)[s]->GetB().ConvertToInt());
     }
 
-    /* Measure GPU time */
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start);
+    auto start = std::chrono::high_resolution_clock::now();
 
     for (int s = 0; s < bootstrap_num; s++) {
-        cudaMemcpyAsync(ctExt_CUDA + (s % SM_count)*(N + 1), ctExt_host + s*(N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyHostToDevice, streams[s % SM_count]);
-        MKMSwitchKernel<<<1, 768, (N + 1) * sizeof(uint64_t), streams[s % SM_count]>>>
-            (ctExt_CUDA + (s % SM_count)*(N + 1), keySwitchingkey_CUDA, static_cast<uint64_t>(fmod.ConvertToInt()));
-        cudaMemcpyAsync(ctExt_host + s*(N + 1), ctExt_CUDA + (s % SM_count)*(N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyDeviceToHost, streams[s % SM_count]);
+        int currentGPU = (s / SM_count) % GPU_num;
+        if(s % SM_count == 0){
+            cudaSetDevice(currentGPU);
+        }
+        cudaMemcpyAsync(GPUVec[currentGPU].ctExt_CUDA + (s % SM_count)*(N + 1), ctExt_host + s*(N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+        MKMSwitchKernel<<<1, 768, (N + 1) * sizeof(uint64_t), GPUVec[currentGPU].streams[s % SM_count]>>>
+            (GPUVec[currentGPU].ctExt_CUDA + (s % SM_count)*(N + 1), GPUVec[currentGPU].keySwitchingkey_CUDA, GPUVec[currentGPU].params_CUDA, static_cast<uint64_t>(fmod.ConvertToInt()));
+        cudaMemcpyAsync(ctExt_host + s*(N + 1), GPUVec[currentGPU].ctExt_CUDA + (s % SM_count)*(N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
     }
-    // CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
-    // CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
-    float milliseconds = 0;
-    cudaEventElapsedTime(&milliseconds, start, stop);
-    std::cout << bootstrap_num << "MKMSwitching GPU time : " << milliseconds << " ms\n";
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+
+    /* Synchronize all GPUs */
+    for(int g = 0; g < GPU_num; g++){
+        cudaSetDevice(g);
+        CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+        CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
+    std::cout << bootstrap_num << "MKMSwitch_CUDA GPU time : " << elapsed.count() << " ms" << std::endl;
 
     /* Copy ctExt_host back to ctExt */
     for (int s = 0; s < bootstrap_num; s++){
