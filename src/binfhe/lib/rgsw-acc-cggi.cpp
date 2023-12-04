@@ -228,45 +228,7 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
 
 void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, 
         std::shared_ptr<std::vector<RLWECiphertext>> acc, const std::vector<NativeVector>& a) const {
-
-    /* HE parameters set */
-    NativeInteger Q                         = params->GetQ();
-    NativeInteger QHalf                     = Q >> 1;
-    NativeInteger::SignedNativeInt Q_int    = Q.ConvertToInt();
-    uint32_t  N                             = params->GetN();
-    auto polyParams                         = params->GetPolyParams();
-
-    std::vector<std::vector<std::vector<Complex>>> acc_d_vec (acc->size(), std::vector<std::vector<Complex>>(2, std::vector<Complex>(N, Complex(0.0, 0.0))));
-
-    // cast acc to BasicFloat
-    for (uint32_t count = 0; count < acc->size(); count++){
-        NativePoly acc0((*acc)[count]->GetElements()[0]), acc1((*acc)[count]->GetElements()[1]);
-        std::vector<std::vector<Complex>> acc_d(2, std::vector<Complex>(N, Complex(0.0, 0.0)));
-        for (size_t i = 0; i < N; ++i) {
-            NativeInteger::SignedNativeInt d = (acc0[i] < QHalf) ? acc0[i].ConvertToInt() : (acc0[i].ConvertToInt() - Q_int);
-            acc_d_vec[count][0][i].real(static_cast<BasicFloat>(d));
-            d = (acc1[i] < QHalf) ? acc1[i].ConvertToInt() : (acc1[i].ConvertToInt() - Q_int);
-            acc_d_vec[count][1][i].real(static_cast<BasicFloat>(d));
-        }
-    }
-
-    AddToAccCGGI_CUDA(params, a, acc_d_vec, "SINGLE");
-
-    //cast acc_d_vec back to NativePoly
-    for (uint32_t count = 0; count < acc->size(); count++){
-        NativeVector ret0(N, Q), ret1(N, Q);
-        for (size_t i = 0; i < N; ++i) {
-            ret0[i] = static_cast<BasicInteger>(acc_d_vec[count][0][i].real());
-            ret1[i] = static_cast<BasicInteger>(acc_d_vec[count][1][i].real());
-        }
-        std::vector<NativePoly> res(2);
-        res[0] = NativePoly(polyParams, Format::COEFFICIENT, false);
-        res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
-        res[0].SetValues(std::move(ret0), Format::COEFFICIENT);
-        res[1].SetValues(std::move(ret1), Format::COEFFICIENT);
-
-        (*acc)[count] = std::make_shared<RLWECiphertextImpl>(std::move(res));
-    }
+    AddToAccCGGI_CUDA(params, a, acc, "SINGLE");
 }
 
 

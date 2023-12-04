@@ -85,6 +85,7 @@ __global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_
 #include <chrono>
 #include "rgsw-cryptoparameters.h"
 #include "lwe-cryptoparameters.h"
+#include "rlwe-ciphertext.h"
 #include "math/dftransform.h"
 
 #ifndef M_PI
@@ -147,10 +148,10 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
 /***************************************
 *  ACC that support vector of ciphertexts 
 ****************************************/
-void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, std::vector<std::vector<std::vector<Complex>>>& acc_d, std::string mode);
+void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, std::shared_ptr<std::vector<RLWECiphertext>> acc, std::string mode);
 
 template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
-void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, std::vector<std::vector<std::vector<Complex>>>& acc_d, std::string mode);
+void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, std::shared_ptr<std::vector<RLWECiphertext>> acc, std::string mode);
 
 /***************************************
 *  Modswitch, Keyswitch, and Modswitch combo
