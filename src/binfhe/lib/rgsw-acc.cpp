@@ -126,9 +126,8 @@ void RingGSWAccumulator::SignedDigitDecompose_FFT(const std::shared_ptr<RingGSWC
     // Signed digit decomposition
     for (size_t j = 0; j < 2; ++j) {
         for (size_t k = 0; k < N; ++k) {
-            // const NativeInteger& t    = static_cast<uint32_t>(input[j][k].real());
-            // NativeInteger::SignedNativeInt d = (t < QHalf) ? t.ConvertToInt() : (t.ConvertToInt() - Q_int);
-            NativeInteger::SignedNativeInt d = static_cast<int64_t>(input[j][k].real());
+            const uint64_t& t    = static_cast<uint64_t>(input[j][k].real());
+            NativeInteger::SignedNativeInt d = (t < QHalf.ConvertToInt()) ? t : (static_cast<int64_t>(t) - Q_int);
 
             for (size_t l = 0; l < digitsG; ++l) {
                 // remainder is signed

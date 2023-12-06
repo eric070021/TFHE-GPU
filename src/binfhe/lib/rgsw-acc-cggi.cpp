@@ -37,7 +37,7 @@
 namespace lbcrypto {
 
 // bootstrapping key for FFT-based accumulator
-//std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> GINX_bootstrappingKey_FFT;
+std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> GINX_bootstrappingKey_FFT;
 
 // Key generation as described in Section 4 of https://eprint.iacr.org/2014/816
 RingGSWACCKey RingGSWAccumulatorCGGI::KeyGenAcc(const std::shared_ptr<RingGSWCryptoParams> params,
@@ -76,20 +76,20 @@ RingGSWACCKey RingGSWAccumulatorCGGI::KeyGenAcc(const std::shared_ptr<RingGSWCry
         }
     }
 
-    // // construct bootstrapping key for FFT-based accumulator
-    // GINX_bootstrappingKey_FFT = std::make_shared<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>>();
-    // (*GINX_bootstrappingKey_FFT).resize(1);
-    // for (size_t i = 0; i < 1; ++i) {
-    //     (*GINX_bootstrappingKey_FFT)[i].resize(2);
-    //     for (size_t j = 0; j < 2; ++j) {
-    //         (*GINX_bootstrappingKey_FFT)[i][j].resize(n);
-    //     }
-    // }
+    // construct bootstrapping key for FFT-based accumulator
+    GINX_bootstrappingKey_FFT = std::make_shared<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>>();
+    (*GINX_bootstrappingKey_FFT).resize(1);
+    for (size_t i = 0; i < 1; ++i) {
+        (*GINX_bootstrappingKey_FFT)[i].resize(2);
+        for (size_t j = 0; j < 2; ++j) {
+            (*GINX_bootstrappingKey_FFT)[i][j].resize(n);
+        }
+    }
 
-    // for (size_t i = 0; i < n; ++i) {
-    //     (*GINX_bootstrappingKey_FFT)[0][0][i] = KeyCopyCGGI_FFT(params, (*ek)[0][0][i]);
-    //     (*GINX_bootstrappingKey_FFT)[0][1][i] = KeyCopyCGGI_FFT(params, (*ek)[0][1][i]);
-    // }
+    for (size_t i = 0; i < n; ++i) {
+        (*GINX_bootstrappingKey_FFT)[0][0][i] = KeyCopyCGGI_FFT(params, (*ek)[0][0][i]);
+        (*GINX_bootstrappingKey_FFT)[0][1][i] = KeyCopyCGGI_FFT(params, (*ek)[0][1][i]);
+    }
 
 //     // copy ek to GINX_bootstrappingKey_FFT
 //     NativeInteger Q   = params->GetQ();
@@ -142,18 +142,16 @@ RingGSWACCKey RingGSWAccumulatorCGGI::KeyGenAcc(const std::shared_ptr<RingGSWCry
 
 void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek,
                                      RLWECiphertext& acc, const NativeVector& a) const {
-
-    // auto mod        = a.GetModulus();
-    // uint32_t n      = a.GetLength();
-    // uint32_t M      = 2 * params->GetN();
-    // uint32_t modInt = mod.ConvertToInt();
-
+    
     /* HE parameters set */
-    NativeInteger Q                         = params->GetQ();
-    NativeInteger QHalf                     = Q >> 1;
-    NativeInteger::SignedNativeInt Q_int    = Q.ConvertToInt();
-    uint32_t  N                             = params->GetN();
-    auto polyParams                         = params->GetPolyParams();
+    auto mod        = a.GetModulus();
+    uint32_t n      = a.GetLength();
+    uint32_t M      = 2 * params->GetN();
+    uint32_t modInt = mod.ConvertToInt();
+
+    NativeInteger Q = params->GetQ();
+    uint32_t  N     = params->GetN();
+    auto polyParams = params->GetPolyParams();
 
     // cast acc to BasicFloat
     NativePoly acc0(acc->GetElements()[0]), acc1(acc->GetElements()[1]);
@@ -161,38 +159,18 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
     acc1.SetFormat(Format::COEFFICIENT);
     std::vector<std::vector<Complex>> acc_d(2, std::vector<Complex>(N, Complex(0.0, 0.0)));
     for (size_t i = 0; i < N; ++i) {
-        NativeInteger::SignedNativeInt d = (acc0[i] < QHalf) ? acc0[i].ConvertToInt() : (acc0[i].ConvertToInt() - Q_int);
-        acc_d[0][i].real(static_cast<BasicFloat>(d));
-        d = (acc1[i] < QHalf) ? acc1[i].ConvertToInt() : (acc1[i].ConvertToInt() - Q_int);
-        acc_d[1][i].real(static_cast<BasicFloat>(d));
+        acc_d[0][i].real(static_cast<BasicFloat>(acc0[i].ConvertToInt()));
+        acc_d[1][i].real(static_cast<BasicFloat>(acc1[i].ConvertToInt()));
     }
 
-    AddToAccCGGI_CUDA(params, a, acc_d, "SINGLE");
-    
-    // DiscreteFourierTransform::NegacyclicForwardTransform(acc_d[0]);
-    // DiscreteFourierTransform::NegacyclicForwardTransform(acc_d[1]);
+    // AddToAccCGGI_CUDA(params, a, acc_d, "SINGLE");
 
-    // for (size_t i = 0; i < n; ++i) {
-    //     // handles -a*E(1) and handles -a*E(-1) = a*E(1)
-    //     AddToAccCGGI(params, (*ek)[0][0][i], (*ek)[0][1][i], mod.ModSub(a[i], mod) * (M / modInt), acc);
-    //     AddToAccCGGI_FFT(params, (*GINX_bootstrappingKey_FFT)[0][0][i], (*GINX_bootstrappingKey_FFT)[0][1][i], mod.ModSub(a[i], mod) * (M / modInt), acc_d);
-    // }
-
-    // // calls 2 IFFTs
-    // for (size_t i = 0; i < 2; ++i)
-    //     DiscreteFourierTransform::NegacyclicInverseTransform(acc_d[i]);
-
-    // // Round to INT64 and MOD
-    // for (size_t i = 0; i < 2; ++i){
-    //     for (size_t j = 0; j < N; ++j) {
-    //         ModInteger temp = static_cast<ModInteger>(round(acc_d[i][j].real()));
-    //         temp = temp % Q_int;
-    //         if (temp < 0)
-    //             temp += Q_int;
-    //         acc_d[i][j].real(static_cast<BasicFloat>(temp));
-    //     }
-    // }
-
+    for (size_t i = 0; i < n; ++i) {
+        // handles -a*E(1) and handles -a*E(-1) = a*E(1)
+        //AddToAccCGGI(params, (*ek)[0][0][i], (*ek)[0][1][i], mod.ModSub(a[i], mod) * (M / modInt), acc);
+        AddToAccCGGI_FFT(params, (*GINX_bootstrappingKey_FFT)[0][0][i], (*GINX_bootstrappingKey_FFT)[0][1][i], mod.ModSub(a[i], mod) * (M / modInt), acc_d);
+    }
+   
     // std::vector<NativePoly> acc_t = acc->GetElements();
     // acc_t[0].SetFormat(Format::COEFFICIENT);
     // acc_t[1].SetFormat(Format::COEFFICIENT);
@@ -203,14 +181,13 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
     //         outputFile << acc_t[i][j] << std::endl;
     // outputFile.close();
 
-    // std::ofstream outputFile;
     // outputFile.open("fft.txt", std::ios::out);
     // for(uint32_t i = 0; i < 2; i++)
     //     for(uint32_t j = 0; j < N ; j++)
     //         outputFile << static_cast<BasicInteger>(acc_d[i][j].real()) << std::endl;
     // outputFile.close();
 
-    //cast acc_d to NativePoly
+    // cast acc_d to NativePoly
     NativeVector ret0(N, Q), ret1(N, Q);
     for (size_t i = 0; i < N; ++i) {
         ret0[i] = static_cast<BasicInteger>(acc_d[0][i].real());
@@ -481,6 +458,7 @@ std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> RingGSWAccumulat
 
 void RingGSWAccumulatorCGGI::AddToAccCGGI_FFT(const std::shared_ptr<RingGSWCryptoParams> params, const std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> ek1,
                       const std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> ek2, const NativeInteger& a, std::vector<std::vector<Complex>>& acc) const{
+ 
     uint64_t MInt = 2 * params->GetN();
     NativeInteger M(MInt);
     uint32_t digitsG2 = params->GetDigitsG() << 1;
@@ -490,27 +468,9 @@ void RingGSWAccumulatorCGGI::AddToAccCGGI_FFT(const std::shared_ptr<RingGSWCrypt
     NativeInteger::SignedNativeInt Q_int = Q.ConvertToInt();
     auto N            = params->GetN();
     
-    std::vector<std::vector<Complex>> ct(acc);
     std::vector<std::vector<Complex>> dct(digitsG2, std::vector<Complex>(N, Complex(0.0, 0.0)));
 
-    // calls 2 Inverse FFTs
-    for (size_t i = 0; i < 2; ++i)
-        DiscreteFourierTransform::NegacyclicInverseTransform(ct[i]);
-
-    // Round and MOD
-    for (size_t i = 0; i < 2; ++i){
-        for (size_t j = 0; j < N; ++j) {
-            ModInteger temp = static_cast<ModInteger>(round(ct[i][j].real()));
-            temp = temp % static_cast<ModInteger>(Q_int);
-            if (temp < 0)
-                temp += static_cast<ModInteger>(Q_int);
-            if (temp >= static_cast<ModInteger>(QHalf.ConvertToInt()))
-                temp -= static_cast<ModInteger>(Q_int);
-            ct[i][j].real(static_cast<BasicFloat>(temp));
-        }
-    }
-
-    SignedDigitDecompose_FFT(params, ct, dct);
+    SignedDigitDecompose_FFT(params, acc, dct);
 
     // calls digitsG2 Forward FFTs
     for (size_t i = 0; i < digitsG2; ++i)
@@ -546,6 +506,8 @@ void RingGSWAccumulatorCGGI::AddToAccCGGI_FFT(const std::shared_ptr<RingGSWCrypt
     // improvement. Needs to be done using two loops for ternary secrets.
     // TODO (dsuponit): benchmark cases with operator*() and operator*=(). Make a copy of dct?
 
+    std::vector<std::vector<Complex>> ct(2, std::vector<Complex>(N, Complex(0.0, 0.0)));
+
     for (size_t l = 0; l < 2; ++l) {
         std::vector<Complex> temp((N >> 1), Complex(0.0, 0.0));
         for (size_t i = 0; i < digitsG2; ++i){
@@ -554,7 +516,7 @@ void RingGSWAccumulatorCGGI::AddToAccCGGI_FFT(const std::shared_ptr<RingGSWCrypt
             }
         }
         for (size_t j = 0; j < (N >> 1); ++j){
-            acc[l][j] += temp[j] * monomial[j];
+            ct[l][j] += temp[j] * monomial[j];
         }
     }
 
@@ -566,7 +528,24 @@ void RingGSWAccumulatorCGGI::AddToAccCGGI_FFT(const std::shared_ptr<RingGSWCrypt
             }
         }
         for (size_t j = 0; j < (N >> 1); ++j){
-            acc[l][j] += temp[j] * monomialNeg[j];
+            ct[l][j] += temp[j] * monomialNeg[j];
+        }
+    }
+
+    // calls 2 Inverse FFTs
+    for (size_t i = 0; i < 2; ++i)
+        DiscreteFourierTransform::NegacyclicInverseTransform(ct[i]);
+
+    // acc + ct
+    for (size_t i = 0; i < 2; ++i) {
+        for (size_t j = 0; j < N; ++j){
+            ct[i][j] = Complex(round(ct[i][j].real()), 0.0);
+            acc[i][j] += ct[i][j];
+            ModInteger temp = static_cast<ModInteger>(acc[i][j].real());
+            temp = temp % static_cast<ModInteger>(Q_int);
+            if (temp < 0)
+                temp += static_cast<ModInteger>(Q_int);
+            acc[i][j].real(static_cast<BasicFloat>(temp));
         }
     }
 }

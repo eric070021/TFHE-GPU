@@ -107,6 +107,25 @@ int main() {
         std::cout << "Input: " << i << ". Expected: " << fp(i % p, p) << ". Evaluated = " << result << std::endl;
     }
 
+    // int failCount = 0;
+    // for(int round = 0; round < 100; round++){
+    //     failCount = 0;
+    //     std::vector<LWECiphertext> ct_vec;
+    //     for (int i = 0; i < p; i++) {
+    //         auto ct1 = cc.Encrypt(sk, i % p, FRESH, p);
+    //         ct_vec.push_back(ct1);
+    //     }
+    //     auto ct_cube_vec = cc.EvalFunc(ct_vec, lut);
+    //     for (int i = 0; i < p; i++) {
+    //         LWEPlaintext result;
+    //         cc.Decrypt(sk, ct_cube_vec[i], &result, p);
+    //         if(static_cast<uint64_t>(result) != fp(i % p, p).ConvertToInt()) {
+    //             failCount++;
+    //         }
+    //     }
+    //     std::cout << "Round: " << round + 1 << ", failCount = " << failCount << std::endl;
+    // }
+
     // for(int round = 1; round <= 512; round++){
     //     std::vector<LWECiphertext> ct_vec;
     //     for (int i = 0; i < round; i++) {
@@ -129,7 +148,6 @@ int main() {
     //     std::cout << std::accumulate(times.begin(), times.end(), 0.0) / times.size() << ", ";
     // }
     
-    // auto start = std::chrono::high_resolution_clock::now(); 
     // int failCount = 0;
     // for(int round = 0; round < 100; round++){
     //     failCount = 0;
@@ -147,9 +165,6 @@ int main() {
     //     }
     //     std::cout << "Round: " << round + 1 << ", failCount = " << failCount << std::endl;
     // }
-    // auto end = std::chrono::high_resolution_clock::now();
-    // auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
-    // std::cout << "Time: " << elapsed.count() << " ms" << std::endl;
 
     return 0;
 }

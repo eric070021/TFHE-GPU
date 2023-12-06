@@ -95,7 +95,7 @@ LWECiphertext BinFHEScheme::EvalBinGate(const std::shared_ptr<BinFHECryptoParams
         std::vector<NativePoly>& accVec = acc->GetElements();
         // the accumulator result is encrypted w.r.t. the transposed secret key
         // we can transpose "a" to get an encryption under the original secret key
-        //accVec[0] = accVec[0].Transpose();
+        accVec[0] = accVec[0].Transpose();
         accVec[0].SetFormat(Format::COEFFICIENT);
         accVec[1].SetFormat(Format::COEFFICIENT);
 
@@ -127,7 +127,7 @@ LWECiphertext BinFHEScheme::Bootstrap(const std::shared_ptr<BinFHECryptoParams> 
     std::vector<NativePoly>& accVec = acc->GetElements();
     // the accumulator result is encrypted w.r.t. the transposed secret key
     // we can transpose "a" to get an encryption under the original secret key
-    //accVec[0] = accVec[0].Transpose();
+    accVec[0] = accVec[0].Transpose();
     accVec[0].SetFormat(Format::COEFFICIENT);
     accVec[1].SetFormat(Format::COEFFICIENT);
 
@@ -542,7 +542,7 @@ LWECiphertext BinFHEScheme::BootstrapFunc(const std::shared_ptr<BinFHECryptoPara
     std::vector<NativePoly>& accVec = acc->GetElements();
     // the accumulator result is encrypted w.r.t. the transposed secret key
     // we can transpose "a" to get an encryption under the original secret key
-    //accVec[0] = accVec[0].Transpose();
+    accVec[0] = accVec[0].Transpose();
     accVec[0].SetFormat(Format::COEFFICIENT);
     accVec[1].SetFormat(Format::COEFFICIENT);
 
@@ -886,22 +886,22 @@ void BinFHEScheme::GPUsetup_wrapper(const std::shared_ptr<BinFHECryptoParams> pa
     uint32_t n      = LWEParams->Getn();
 
     // construct bootstrapping key for FFT-based accumulator
-    auto GINX_bootstrappingKey_FFT = std::make_shared<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>>();
-    (*GINX_bootstrappingKey_FFT).resize(1);
+    auto bootstrappingKey_FFT = std::make_shared<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>>();
+    (*bootstrappingKey_FFT).resize(1);
     for (size_t i = 0; i < 1; ++i) {
-        (*GINX_bootstrappingKey_FFT)[i].resize(2);
+        (*bootstrappingKey_FFT)[i].resize(2);
         for (size_t j = 0; j < 2; ++j) {
-            (*GINX_bootstrappingKey_FFT)[i][j].resize(n);
+            (*bootstrappingKey_FFT)[i][j].resize(n);
         }
     }
 
     for (size_t i = 0; i < n; ++i) {
-        (*GINX_bootstrappingKey_FFT)[0][0][i] = KeyCopy_FFT(RGSWParams, (*ek.BSkey)[0][0][i]);
-        (*GINX_bootstrappingKey_FFT)[0][1][i] = KeyCopy_FFT(RGSWParams, (*ek.BSkey)[0][1][i]);
+        (*bootstrappingKey_FFT)[0][0][i] = KeyCopy_FFT(RGSWParams, (*ek.BSkey)[0][0][i]);
+        (*bootstrappingKey_FFT)[0][1][i] = KeyCopy_FFT(RGSWParams, (*ek.BSkey)[0][1][i]);
     }
     
     /* Bring data on GPU */
-    GPUSetup(GINX_bootstrappingKey_FFT, RGSWParams, ek.KSkey, LWEParams);
+    GPUSetup(bootstrappingKey_FFT, RGSWParams, ek.KSkey, LWEParams);
 }
 
 std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> BinFHEScheme::KeyCopy_FFT(const std::shared_ptr<RingGSWCryptoParams> params, 

@@ -105,98 +105,15 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
     const unsigned int offset = cufftdx::size_of<FFT>::value * (blockIdx.x * FFT::ffts_per_block + local_fft_id);
     extern __shared__ complex_type shared_mem[];
     complex_type thread_data[FFT::storage_size];     
-    
-    /* 2 times Forward FFT */
-    if(bid == 0){
-        // Load data from shared memory to registers
-        {
-            unsigned int index = offset + threadIdx.x;
-            unsigned int twist_idx = threadIdx.x;
-            for (unsigned i = 0; i < FFT::elements_per_thread; i++) {
-                // twisting
-                acc_CUDA[index] = cuCmul(acc_CUDA[index], twiddleTable_CUDA[twist_idx]);
-                thread_data[i] = complex_type {acc_CUDA[index].x, acc_CUDA[index].y};
-                // FFT::stride shows how elements from a single FFT should be split between threads
-                index += FFT::stride;
-                twist_idx += FFT::stride;
-            }
-        }
 
-        FFT().execute(thread_data, shared_mem);
-
-        // Save results
-        {
-            unsigned int index = offset + threadIdx.x;
-            for (unsigned i = 0; i < FFT::elements_per_thread; i++) {
-                acc_CUDA[index] = make_cuDoubleComplex(thread_data[i].x, thread_data[i].y);
-                // FFT::stride shows how elements from a single FFT should be split between threads
-                index += FFT::stride;
-            }
-        }
-    }
-    grid.sync();
-    
-    for(uint32_t round = 0; round < n; ++round){
-        /* Copy acc_CUDA to ct_CUDA */
-        for(uint32_t i = gtid; i < N; i += gdim){
-            ct_CUDA[i] = acc_CUDA[i];
-        }
-        grid.sync();
-
-        /* 2 times Inverse IFFT */
-        if(bid == 0){
-            // Load data from shared memory to registers
-            {
-                unsigned int index = offset + threadIdx.x;
-                for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
-                    thread_data[i] = complex_type {ct_CUDA[index].x, ct_CUDA[index].y};
-                    // FFT::stride shows how elements from a single FFT should be split between threads
-                    index += IFFT::stride;
-                }
-            }
-
-            // Scale values
-            double scale = 1.0 / cufftdx::size_of<IFFT>::value;
-            for (unsigned int i = 0; i < IFFT::elements_per_thread; i++) {
-                thread_data[i].x *= scale;
-                thread_data[i].y *= scale;
-            }
-
-            IFFT().execute(thread_data, shared_mem);
-        
-            // Save results
-            {
-                unsigned int index = offset + threadIdx.x;
-                unsigned int twist_idx = threadIdx.x;
-                for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
-                    ct_CUDA[index].x = thread_data[i].x;
-                    ct_CUDA[index].y = thread_data[i].y;
-                    // twisting
-                    ct_CUDA[index] = cuCmul(ct_CUDA[index], twiddleTable_CUDA[twist_idx + NHalf]);
-                    // Round to INT128 and MOD
-                    ct_CUDA[index].x = static_cast<double>(static_cast<__int128_t>(rint(ct_CUDA[index].x)) % static_cast<__int128_t>(Q));
-                    if (ct_CUDA[index].x < 0)
-                        ct_CUDA[index].x += static_cast<double>(Q);
-                    if (ct_CUDA[index].x >= QHalf)
-                        ct_CUDA[index].x -= static_cast<double>(Q);
-                    ct_CUDA[index].y = static_cast<double>(static_cast<__int128_t>(rint(ct_CUDA[index].y)) % static_cast<__int128_t>(Q));
-                    if (ct_CUDA[index].y < 0)
-                        ct_CUDA[index].y += static_cast<double>(Q);
-                    if (ct_CUDA[index].y >= QHalf)
-                        ct_CUDA[index].y -= static_cast<double>(Q);
-                    // IFFT::stride shows how elements from a single FFT should be split between threads
-                    index += IFFT::stride;
-                    twist_idx += IFFT::stride;
-                }
-            }
-        }
-        grid.sync();
-
+     for(uint32_t round = 0; round < n; ++round){
         /* SignedDigitDecompose */
         // polynomial from a
         for (size_t k = gtid; k < NHalf; k += gdim) {
-            int64_t d0 = static_cast<int64_t>(ct_CUDA[k].x);
-            int64_t d1 = static_cast<int64_t>(ct_CUDA[k].y);
+            const uint64_t& t1 = static_cast<uint64_t>(acc_CUDA[k].x);
+            const uint64_t& t2 = static_cast<uint64_t>(acc_CUDA[k].y);
+            int64_t d0 = (t1 < QHalf) ? static_cast<int64_t>(t1) : (static_cast<int64_t>(t1) - static_cast<int64_t>(Q));
+            int64_t d1 = (t2 < QHalf) ? static_cast<int64_t>(t2) : (static_cast<int64_t>(t2) - static_cast<int64_t>(Q));
 
             for (size_t l = 0; l < digitsG2; l += 2) {
                 int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
@@ -219,8 +136,10 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
 
         // polynomial from b
         for (size_t k = gtid + NHalf; k < N; k += gdim) {
-            int64_t d0 = static_cast<int64_t>(ct_CUDA[k].x);
-            int64_t d1 = static_cast<int64_t>(ct_CUDA[k].y);
+            const uint64_t& t1 = static_cast<uint64_t>(acc_CUDA[k].x);
+            const uint64_t& t2 = static_cast<uint64_t>(acc_CUDA[k].y);
+            int64_t d0 = (t1 < QHalf) ? static_cast<int64_t>(t1) : (static_cast<int64_t>(t1) - static_cast<int64_t>(Q));
+            int64_t d1 = (t2 < QHalf) ? static_cast<int64_t>(t2) : (static_cast<int64_t>(t2) - static_cast<int64_t>(Q));
 
             for (size_t l = 0; l < digitsG2; l += 2) {
                 int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
@@ -282,130 +201,130 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
         if (indexNeg == M)
             indexNeg = 0;
         
+        /* Initialize ct_CUDA */
+        for(uint32_t i = gtid; i < N; i += gdim){
+            ct_CUDA[i] = make_cuDoubleComplex(0.0, 0.0);
+        }
+        grid.sync();
+
         /* ACC times Bootstrapping key and monomial */
         /* multiply with ek0 */
         // polynomial a
         for (uint32_t i = gtid; i < NHalf; i += gdim){
-            ct_CUDA[i] = make_cuDoubleComplex(0, 0);
+            Complex_d temp = make_cuDoubleComplex(0, 0);
             for (uint32_t l = 0; l < digitsG2; ++l){
-                ct_CUDA[i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].x, ct_CUDA[i].x);
-                ct_CUDA[i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].y, ct_CUDA[i].x);
-                ct_CUDA[i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].y, ct_CUDA[i].y);
-                ct_CUDA[i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].x, ct_CUDA[i].y);
+                temp.x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].x, temp.x);
+                temp.x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].y, temp.x);
+                temp.y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].y, temp.y);
+                temp.y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].x, temp.y);
             }
+            /* multiply with postive monomial */
+            ct_CUDA[i].x = fma(temp.x, monomial_CUDA[indexPos*NHalf + i].x, ct_CUDA[i].x);
+            ct_CUDA[i].x = fma(-temp.y, monomial_CUDA[indexPos*NHalf + i].y, ct_CUDA[i].x);
+            ct_CUDA[i].y = fma(temp.x, monomial_CUDA[indexPos*NHalf + i].y, ct_CUDA[i].y);
+            ct_CUDA[i].y = fma(temp.y, monomial_CUDA[indexPos*NHalf + i].x, ct_CUDA[i].y);
         }
         // polynomial b
         for (uint32_t i = gtid; i < NHalf; i += gdim){
-            ct_CUDA[NHalf + i] = make_cuDoubleComplex(0.0, 0.0);
+            Complex_d temp = make_cuDoubleComplex(0, 0);
             for (uint32_t l = 0; l < digitsG2; ++l){
-                ct_CUDA[NHalf + i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, ct_CUDA[NHalf + i].x);
-                ct_CUDA[NHalf + i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, ct_CUDA[NHalf + i].x);
-                ct_CUDA[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, ct_CUDA[NHalf + i].y);
-                ct_CUDA[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, ct_CUDA[NHalf + i].y);
+                temp.x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, temp.x);
+                temp.x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, temp.x);
+                temp.y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, temp.y);
+                temp.y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, temp.y);
             }
+            /* multiply with postive monomial */
+            ct_CUDA[NHalf + i].x = fma(temp.x, monomial_CUDA[indexPos*NHalf + i].x, ct_CUDA[NHalf + i].x);
+            ct_CUDA[NHalf + i].x = fma(-temp.y, monomial_CUDA[indexPos*NHalf + i].y, ct_CUDA[NHalf + i].x);
+            ct_CUDA[NHalf + i].y = fma(temp.x, monomial_CUDA[indexPos*NHalf + i].y, ct_CUDA[NHalf + i].y);
+            ct_CUDA[NHalf + i].y = fma(temp.y, monomial_CUDA[indexPos*NHalf + i].x, ct_CUDA[NHalf + i].y);
         }
-        grid.sync();
-        /* multiply with postive monomial */
-        // polynomial a
-        for (uint32_t i = gtid; i < NHalf; i += gdim){
-            acc_CUDA[i].x = fma(ct_CUDA[i].x, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[i].x);
-            acc_CUDA[i].x = fma(-ct_CUDA[i].y, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[i].x);
-            acc_CUDA[i].y = fma(ct_CUDA[i].x, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[i].y);
-            acc_CUDA[i].y = fma(ct_CUDA[i].y, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[i].y);
-        }
-        // polynomial b
-        for (uint32_t i = gtid; i < NHalf; i += gdim){
-            acc_CUDA[NHalf + i].x = fma(ct_CUDA[NHalf + i].x, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[NHalf + i].x);
-            acc_CUDA[NHalf + i].x = fma(-ct_CUDA[NHalf + i].y, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[NHalf + i].x);
-            acc_CUDA[NHalf + i].y = fma(ct_CUDA[NHalf + i].x, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[NHalf + i].y);
-            acc_CUDA[NHalf + i].y = fma(ct_CUDA[NHalf + i].y, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[NHalf + i].y);
-        }        
         grid.sync();
 
         /* multiply with ek1 */
         // polynomial a
         for (uint32_t i = gtid; i < NHalf; i += gdim){
-            ct_CUDA[i] = make_cuDoubleComplex(0, 0);
+            Complex_d temp = make_cuDoubleComplex(0, 0);
             for (uint32_t l = 0; l < digitsG2; ++l){
-                ct_CUDA[i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].x, ct_CUDA[i].x);
-                ct_CUDA[i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].y, ct_CUDA[i].x);
-                ct_CUDA[i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].y, ct_CUDA[i].y);
-                ct_CUDA[i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].x, ct_CUDA[i].y);
+                temp.x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].x, temp.x);
+                temp.x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].y, temp.x);
+                temp.y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].y, temp.y);
+                temp.y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].x, temp.y);
             }
+            /* multiply with negative monomial */
+            ct_CUDA[i].x = fma(temp.x, monomial_CUDA[indexNeg*NHalf + i].x, ct_CUDA[i].x);
+            ct_CUDA[i].x = fma(-temp.y, monomial_CUDA[indexNeg*NHalf + i].y, ct_CUDA[i].x);
+            ct_CUDA[i].y = fma(temp.x, monomial_CUDA[indexNeg*NHalf + i].y, ct_CUDA[i].y);
+            ct_CUDA[i].y = fma(temp.y, monomial_CUDA[indexNeg*NHalf + i].x, ct_CUDA[i].y);
         }
         // polynomial b
         for (uint32_t i = gtid; i < NHalf; i += gdim){
-            ct_CUDA[NHalf + i] = make_cuDoubleComplex(0.0, 0.0);
+            Complex_d temp = make_cuDoubleComplex(0, 0);
             for (uint32_t l = 0; l < digitsG2; ++l){
-                ct_CUDA[NHalf + i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, ct_CUDA[NHalf + i].x);
-                ct_CUDA[NHalf + i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, ct_CUDA[NHalf + i].x);
-                ct_CUDA[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, ct_CUDA[NHalf + i].y);
-                ct_CUDA[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, ct_CUDA[NHalf + i].y);
+                temp.x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, temp.x);
+                temp.x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, temp.x);
+                temp.y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, temp.y);
+                temp.y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, temp.y);
+            }
+            /* multiply with negative monomial */
+            ct_CUDA[NHalf + i].x = fma(temp.x, monomial_CUDA[indexNeg*NHalf + i].x, ct_CUDA[NHalf + i].x);
+            ct_CUDA[NHalf + i].x = fma(-temp.y, monomial_CUDA[indexNeg*NHalf + i].y, ct_CUDA[NHalf + i].x);
+            ct_CUDA[NHalf + i].y = fma(temp.x, monomial_CUDA[indexNeg*NHalf + i].y, ct_CUDA[NHalf + i].y);
+            ct_CUDA[NHalf + i].y = fma(temp.y, monomial_CUDA[indexNeg*NHalf + i].x, ct_CUDA[NHalf + i].y);
+        }
+        grid.sync();
+
+        /* 2 times Inverse IFFT */
+        if(bid == 0){
+            // Load data from shared memory to registers
+            {
+                unsigned int index = offset + threadIdx.x;
+                for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
+                    thread_data[i] = complex_type {ct_CUDA[index].x, ct_CUDA[index].y};
+                    // FFT::stride shows how elements from a single FFT should be split between threads
+                    index += IFFT::stride;
+                }
+            }
+
+            // Scale values
+            double scale = 1.0 / cufftdx::size_of<IFFT>::value;
+            for (unsigned int i = 0; i < IFFT::elements_per_thread; i++) {
+                thread_data[i].x *= scale;
+                thread_data[i].y *= scale;
+            }
+
+            IFFT().execute(thread_data, shared_mem);
+        
+            // Save results
+            {
+                unsigned int index = offset + threadIdx.x;
+                unsigned int twist_idx = threadIdx.x;
+                for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
+                    ct_CUDA[index].x = thread_data[i].x;
+                    ct_CUDA[index].y = thread_data[i].y;
+                    // twisting
+                    ct_CUDA[index] = cuCmul(ct_CUDA[index], twiddleTable_CUDA[twist_idx + NHalf]);
+                    // Rounding
+                    ct_CUDA[index].x = rint(ct_CUDA[index].x);
+                    ct_CUDA[index].y = rint(ct_CUDA[index].y);
+                    // acc + ct
+                    acc_CUDA[index].x += ct_CUDA[index].x;
+                    acc_CUDA[index].y += ct_CUDA[index].y;
+                    // Modulus Q
+                    acc_CUDA[index].x = static_cast<double>(static_cast<__int128_t>(acc_CUDA[index].x) % static_cast<__int128_t>(Q));
+                    if (acc_CUDA[index].x < 0)
+                        acc_CUDA[index].x += static_cast<double>(Q);
+                    acc_CUDA[index].y = static_cast<double>(static_cast<__int128_t>(acc_CUDA[index].y) % static_cast<__int128_t>(Q));
+                    if (acc_CUDA[index].y < 0)
+                        acc_CUDA[index].y += static_cast<double>(Q);
+                    // IFFT::stride shows how elements from a single FFT should be split between threads
+                    index += IFFT::stride;
+                    twist_idx += IFFT::stride;
+                }
             }
         }
         grid.sync();
-        /* multiply with negative monomial */
-        // polynomial a
-        for (uint32_t i = gtid; i < NHalf; i += gdim){
-            acc_CUDA[i].x = fma(ct_CUDA[i].x, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[i].x);
-            acc_CUDA[i].x = fma(-ct_CUDA[i].y, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[i].x);
-            acc_CUDA[i].y = fma(ct_CUDA[i].x, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[i].y);
-            acc_CUDA[i].y = fma(ct_CUDA[i].y, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[i].y);
-        }
-        // polynomial b
-        for (uint32_t i = gtid; i < NHalf; i += gdim){
-            acc_CUDA[NHalf + i].x = fma(ct_CUDA[NHalf + i].x, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[NHalf + i].x);
-            acc_CUDA[NHalf + i].x = fma(-ct_CUDA[NHalf + i].y, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[NHalf + i].x);
-            acc_CUDA[NHalf + i].y = fma(ct_CUDA[NHalf + i].x, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[NHalf + i].y);
-            acc_CUDA[NHalf + i].y = fma(ct_CUDA[NHalf + i].y, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[NHalf + i].y);
-        }        
-        grid.sync();
     }
-
-    /* 2 times Inverse IFFT */
-    if(bid == 0){
-        // Load data from shared memory to registers
-        {
-            unsigned int index = offset + threadIdx.x;
-            for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
-                thread_data[i] = complex_type {acc_CUDA[index].x, acc_CUDA[index].y};
-                // FFT::stride shows how elements from a single FFT should be split between threads
-                index += IFFT::stride;
-            }
-        }
-
-        // Scale values
-        double scale = 1.0 / cufftdx::size_of<IFFT>::value;
-        for (unsigned int i = 0; i < IFFT::elements_per_thread; i++) {
-            thread_data[i].x *= scale;
-            thread_data[i].y *= scale;
-        }
-
-        IFFT().execute(thread_data, shared_mem);
-    
-        // Save results
-        {
-            unsigned int index = offset + threadIdx.x;
-            unsigned int twist_idx = threadIdx.x;
-            for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
-                acc_CUDA[index].x = thread_data[i].x;
-                acc_CUDA[index].y = thread_data[i].y;
-                // twisting
-                acc_CUDA[index] = cuCmul(acc_CUDA[index], twiddleTable_CUDA[twist_idx + NHalf]);
-                // Round to INT128 and MOD
-                acc_CUDA[index].x = static_cast<double>(static_cast<__int128_t>(rint(acc_CUDA[index].x)) % static_cast<__int128_t>(Q));
-                if (acc_CUDA[index].x < 0)
-                    acc_CUDA[index].x += static_cast<double>(Q);
-                acc_CUDA[index].y = static_cast<double>(static_cast<__int128_t>(rint(acc_CUDA[index].y)) % static_cast<__int128_t>(Q));
-                if (acc_CUDA[index].y < 0)
-                    acc_CUDA[index].y += static_cast<double>(Q);
-                // IFFT::stride shows how elements from a single FFT should be split between threads
-                index += IFFT::stride;
-                twist_idx += FFT::stride;
-            }
-        }
-    }
-    grid.sync();
 
     /****************************************
     * the accumulator result is encrypted w.r.t. the transposed secret key
@@ -455,107 +374,15 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
     const unsigned int offset = cufftdx::size_of<FFT>::value * (blockIdx.x * FFT::ffts_per_block + local_fft_id);
     extern __shared__ complex_type shared_mem[];
     complex_type thread_data[FFT::storage_size];     
-    
-    /* 2 times Forward FFT */
-    if(threadIdx.y < 2){
-        // Load data from shared memory to registers
-        {
-            unsigned int index = offset + threadIdx.x;
-            unsigned int twist_idx = threadIdx.x;
-            for (unsigned i = 0; i < FFT::elements_per_thread; i++) {
-                // twisting
-                acc_CUDA[index] = cuCmul(acc_CUDA[index], twiddleTable_CUDA[twist_idx]);
-                thread_data[i] = complex_type {acc_CUDA[index].x, acc_CUDA[index].y};
-                // FFT::stride shows how elements from a single FFT should be split between threads
-                index += FFT::stride;
-                twist_idx += FFT::stride;
-            }
-        }
-
-        FFT().execute(thread_data, shared_mem);
-
-        // Save results
-        {
-            unsigned int index = offset + threadIdx.x;
-            for (unsigned i = 0; i < FFT::elements_per_thread; i++) {
-                acc_CUDA[index] = make_cuDoubleComplex(thread_data[i].x, thread_data[i].y);
-                // FFT::stride shows how elements from a single FFT should be split between threads
-                index += FFT::stride;
-            }
-        }
-    }
-    else{ // must meet syncs made by FFT
-        for(uint32_t i = 0; i < syncNum; ++i)
-            __syncthreads();
-    }
-    __syncthreads();
 
     for(uint32_t round = 0; round < n; ++round){
-        /* Copy acc_CUDA to shared_mem */
-        for(uint32_t i = tid; i < N; i += bdim){
-            shared_mem[i] = complex_type {acc_CUDA[i].x, acc_CUDA[i].y};
-        }
-        __syncthreads();
-
-        /* 2 times Inverse IFFT */
-        if(threadIdx.y < 2){
-            // Load data from shared memory to registers
-            {
-                unsigned int index = offset + threadIdx.x;
-                for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
-                    thread_data[i] = shared_mem[index];
-                    // FFT::stride shows how elements from a single FFT should be split between threads
-                    index += IFFT::stride;
-                }
-            }
-
-            // Scale values
-            double scale = 1.0 / cufftdx::size_of<IFFT>::value;
-            for (unsigned int i = 0; i < IFFT::elements_per_thread; i++) {
-                thread_data[i].x *= scale;
-                thread_data[i].y *= scale;
-            }
-
-            IFFT().execute(thread_data, shared_mem);
-        
-            // Save results
-            {
-                unsigned int index = offset + threadIdx.x;
-                unsigned int twist_idx = threadIdx.x;
-                for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
-                    shared_mem[index] = thread_data[i];
-                    // twisting
-                    double temp = shared_mem[index].x* twiddleTable_CUDA[twist_idx + NHalf].x - shared_mem[index].y * twiddleTable_CUDA[twist_idx + NHalf].y;
-                    shared_mem[index].y = shared_mem[index].x* twiddleTable_CUDA[twist_idx + NHalf].y + shared_mem[index].y * twiddleTable_CUDA[twist_idx + NHalf].x;
-                    shared_mem[index].x = temp;
-                    // Round to INT128 and MOD
-                    shared_mem[index].x = static_cast<double>(static_cast<__int128_t>(rint(shared_mem[index].x)) % static_cast<__int128_t>(Q));
-                    if (shared_mem[index].x < 0)
-                        shared_mem[index].x += static_cast<double>(Q);
-                    if (shared_mem[index].x >= QHalf)
-                        shared_mem[index].x -= static_cast<double>(Q);
-                    shared_mem[index].y = static_cast<double>(static_cast<__int128_t>(rint(shared_mem[index].y)) % static_cast<__int128_t>(Q));
-                    if (shared_mem[index].y < 0)
-                        shared_mem[index].y += static_cast<double>(Q);
-                    if (shared_mem[index].y >= QHalf)
-                        shared_mem[index].y -= static_cast<double>(Q);
-                    // IFFT::stride shows how elements from a single FFT should be split between threads
-                    index += IFFT::stride;
-                    twist_idx += IFFT::stride;
-                }
-            }
-        }
-        else{ // must meet syncs made by IFFT
-            for(uint32_t i = 0; i < syncNum; ++i)
-                __syncthreads();
-        }
-        __syncthreads();
-
         /* SignedDigitDecompose */
         // polynomial from a
         for (size_t k = tid; k < NHalf; k += bdim) {
-            int64_t d0 = static_cast<int64_t>(shared_mem[k].x);
-            int64_t d1 = static_cast<int64_t>(shared_mem[k].y);
+            const uint64_t& t1 = static_cast<uint64_t>(acc_CUDA[k].x);
+            const uint64_t& t2 = static_cast<uint64_t>(acc_CUDA[k].y);
+            int64_t d0 = (t1 < QHalf) ? static_cast<int64_t>(t1) : (static_cast<int64_t>(t1) - static_cast<int64_t>(Q));
+            int64_t d1 = (t2 < QHalf) ? static_cast<int64_t>(t2) : (static_cast<int64_t>(t2) - static_cast<int64_t>(Q));
 
             for (size_t l = 0; l < digitsG2; l += 2) {
                 int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
@@ -578,8 +405,10 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
 
         // polynomial from b
         for (size_t k = tid + NHalf; k < N; k += bdim) {
-            int64_t d0 = static_cast<int64_t>(shared_mem[k].x);
-            int64_t d1 = static_cast<int64_t>(shared_mem[k].y);
+            const uint64_t& t1 = static_cast<uint64_t>(acc_CUDA[k].x);
+            const uint64_t& t2 = static_cast<uint64_t>(acc_CUDA[k].y);
+            int64_t d0 = (t1 < QHalf) ? static_cast<int64_t>(t1) : (static_cast<int64_t>(t1) - static_cast<int64_t>(Q));
+            int64_t d1 = (t2 < QHalf) ? static_cast<int64_t>(t2) : (static_cast<int64_t>(t2) - static_cast<int64_t>(Q));
 
             for (size_t l = 0; l < digitsG2; l += 2) {
                 int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
@@ -640,135 +469,130 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
             indexPos = 0;
         if (indexNeg == M)
             indexNeg = 0;
-        
+
         /* ACC times Bootstrapping key and monomial */
         /* multiply with ek0 */
         // polynomial a
         for (uint32_t i = tid; i < NHalf; i += bdim){
-            shared_mem[i] = complex_type(0.0, 0.0);
+           Complex_d temp = make_cuDoubleComplex(0, 0);
             for (uint32_t l = 0; l < digitsG2; ++l){
-                shared_mem[i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].x, shared_mem[i].x);
-                shared_mem[i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].y, shared_mem[i].x);
-                shared_mem[i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].y, shared_mem[i].y);
-                shared_mem[i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].x, shared_mem[i].y);
+                temp.x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].x, temp.x);
+                temp.x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].y, temp.x);
+                temp.y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].y, temp.y);
+                temp.y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + (l << 1)*NHalf + i].x, temp.y);
             }
+            /* multiply with postive monomial */
+            shared_mem[i].x = fma(temp.x, monomial_CUDA[indexPos*NHalf + i].x, shared_mem[i].x);
+            shared_mem[i].x = fma(-temp.y, monomial_CUDA[indexPos*NHalf + i].y, shared_mem[i].x);
+            shared_mem[i].y = fma(temp.x, monomial_CUDA[indexPos*NHalf + i].y, shared_mem[i].y);
+            shared_mem[i].y = fma(temp.y, monomial_CUDA[indexPos*NHalf + i].x, shared_mem[i].y);
         }
         // polynomial b
         for (uint32_t i = tid; i < NHalf; i += bdim){
-            shared_mem[NHalf + i] = complex_type(0.0, 0.0);
+             Complex_d temp = make_cuDoubleComplex(0, 0);
             for (uint32_t l = 0; l < digitsG2; ++l){
-                shared_mem[NHalf + i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, shared_mem[NHalf + i].x);
-                shared_mem[NHalf + i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, shared_mem[NHalf + i].x);
-                shared_mem[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, shared_mem[NHalf + i].y);
-                shared_mem[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, shared_mem[NHalf + i].y);
+                temp.x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, temp.x);
+                temp.x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, temp.x);
+                temp.y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, temp.y);
+                temp.y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, temp.y);
             }
+            /* multiply with postive monomial */
+            shared_mem[NHalf + i].x = fma(temp.x, monomial_CUDA[indexPos*NHalf + i].x, shared_mem[NHalf + i].x);
+            shared_mem[NHalf + i].x = fma(-temp.y, monomial_CUDA[indexPos*NHalf + i].y, shared_mem[NHalf + i].x);
+            shared_mem[NHalf + i].y = fma(temp.x, monomial_CUDA[indexPos*NHalf + i].y, shared_mem[NHalf + i].y);
+            shared_mem[NHalf + i].y = fma(temp.y, monomial_CUDA[indexPos*NHalf + i].x, shared_mem[NHalf + i].y);
         }
-        __syncthreads();
-        /* multiply with postive monomial */
-        // polynomial a
-        for (uint32_t i = tid; i < NHalf; i += bdim){
-            acc_CUDA[i].x = fma(shared_mem[i].x, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[i].x);
-            acc_CUDA[i].x = fma(-shared_mem[i].y, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[i].x);
-            acc_CUDA[i].y = fma(shared_mem[i].x, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[i].y);
-            acc_CUDA[i].y = fma(shared_mem[i].y, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[i].y);
-        }
-        // polynomial b
-        for (uint32_t i = tid; i < NHalf; i += bdim){
-            acc_CUDA[NHalf + i].x = fma(shared_mem[NHalf + i].x, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[NHalf + i].x);
-            acc_CUDA[NHalf + i].x = fma(-shared_mem[NHalf + i].y, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[NHalf + i].x);
-            acc_CUDA[NHalf + i].y = fma(shared_mem[NHalf + i].x, monomial_CUDA[indexPos*NHalf + i].y, acc_CUDA[NHalf + i].y);
-            acc_CUDA[NHalf + i].y = fma(shared_mem[NHalf + i].y, monomial_CUDA[indexPos*NHalf + i].x, acc_CUDA[NHalf + i].y);
-        }        
         __syncthreads();
 
         /* multiply with ek1 */
         // polynomial a
         for (uint32_t i = tid; i < NHalf; i += bdim){
-            shared_mem[i] = complex_type(0.0, 0.0);
+            Complex_d temp = make_cuDoubleComplex(0, 0);
             for (uint32_t l = 0; l < digitsG2; ++l){
-                shared_mem[i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].x, shared_mem[i].x);
-                shared_mem[i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].y, shared_mem[i].x);
-                shared_mem[i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].y, shared_mem[i].y);
-                shared_mem[i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].x, shared_mem[i].y);
+                temp.x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].x, temp.x);
+                temp.x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].y, temp.x);
+                temp.y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].y, temp.y);
+                temp.y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + (l << 1)*NHalf + i].x, temp.y);
             }
+            /* multiply with negative monomial */
+            shared_mem[i].x = fma(temp.x, monomial_CUDA[indexNeg*NHalf + i].x, shared_mem[i].x);
+            shared_mem[i].x = fma(-temp.y, monomial_CUDA[indexNeg*NHalf + i].y, shared_mem[i].x);
+            shared_mem[i].y = fma(temp.x, monomial_CUDA[indexNeg*NHalf + i].y, shared_mem[i].y);
+            shared_mem[i].y = fma(temp.y, monomial_CUDA[indexNeg*NHalf + i].x, shared_mem[i].y);
         }
         // polynomial b
         for (uint32_t i = tid; i < NHalf; i += bdim){
-            shared_mem[NHalf + i] = complex_type(0.0, 0.0);
+            Complex_d temp = make_cuDoubleComplex(0, 0);
             for (uint32_t l = 0; l < digitsG2; ++l){
-                shared_mem[NHalf + i].x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, shared_mem[NHalf + i].x);
-                shared_mem[NHalf + i].x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, shared_mem[NHalf + i].x);
-                shared_mem[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, shared_mem[NHalf + i].y);
-                shared_mem[NHalf + i].y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, shared_mem[NHalf + i].y);
+                temp.x = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, temp.x);
+                temp.x = fma(-dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, temp.x);
+                temp.y = fma(dct_CUDA[l*NHalf + i].x, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].y, temp.y);
+                temp.y = fma(dct_CUDA[l*NHalf + i].y, GINX_bootstrappingKey_CUDA[n*RGSW_size + round*RGSW_size + ((l << 1) + 1)*NHalf + i].x, temp.y);
             }
+            /* multiply with negative monomial */
+            shared_mem[NHalf + i].x = fma(temp.x, monomial_CUDA[indexNeg*NHalf + i].x, shared_mem[NHalf + i].x);
+            shared_mem[NHalf + i].x = fma(-temp.y, monomial_CUDA[indexNeg*NHalf + i].y, shared_mem[NHalf + i].x);
+            shared_mem[NHalf + i].y = fma(temp.x, monomial_CUDA[indexNeg*NHalf + i].y, shared_mem[NHalf + i].y);
+            shared_mem[NHalf + i].y = fma(temp.y, monomial_CUDA[indexNeg*NHalf + i].x, shared_mem[NHalf + i].y);
         }
         __syncthreads();
-        /* multiply with negative monomial */
-        // polynomial a
-        for (uint32_t i = tid; i < NHalf; i += bdim){
-            acc_CUDA[i].x = fma(shared_mem[i].x, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[i].x);
-            acc_CUDA[i].x = fma(-shared_mem[i].y, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[i].x);
-            acc_CUDA[i].y = fma(shared_mem[i].x, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[i].y);
-            acc_CUDA[i].y = fma(shared_mem[i].y, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[i].y);
+
+        /* 2 times Inverse IFFT */
+        if(threadIdx.y < 2){
+            // Load data from shared memory to registers
+            {
+                unsigned int index = offset + threadIdx.x;
+                for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
+                    thread_data[i] = shared_mem[index];
+                    // FFT::stride shows how elements from a single FFT should be split between threads
+                    index += IFFT::stride;
+                }
+            }
+
+            // Scale values
+            double scale = 1.0 / cufftdx::size_of<IFFT>::value;
+            for (unsigned int i = 0; i < IFFT::elements_per_thread; i++) {
+                thread_data[i].x *= scale;
+                thread_data[i].y *= scale;
+            }
+
+            IFFT().execute(thread_data, shared_mem);
+        
+            // Save results
+            {
+                unsigned int index = offset + threadIdx.x;
+                unsigned int twist_idx = threadIdx.x;
+                for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
+                    shared_mem[index] = thread_data[i];
+                    // twisting
+                    double temp = shared_mem[index].x* twiddleTable_CUDA[twist_idx + NHalf].x - shared_mem[index].y * twiddleTable_CUDA[twist_idx + NHalf].y;
+                    shared_mem[index].y = shared_mem[index].x* twiddleTable_CUDA[twist_idx + NHalf].y + shared_mem[index].y * twiddleTable_CUDA[twist_idx + NHalf].x;
+                    shared_mem[index].x = temp;
+                    // Rounding
+                    shared_mem[index].x = rint(shared_mem[index].x);
+                    shared_mem[index].y = rint(shared_mem[index].y);
+                    // acc + ct
+                    acc_CUDA[index].x += shared_mem[index].x;
+                    acc_CUDA[index].y += shared_mem[index].y;
+                    // Modulus Q
+                    acc_CUDA[index].x = static_cast<double>(static_cast<__int128_t>(acc_CUDA[index].x) % static_cast<__int128_t>(Q));
+                    if (acc_CUDA[index].x < 0)
+                        acc_CUDA[index].x += static_cast<double>(Q);
+                    acc_CUDA[index].y = static_cast<double>(static_cast<__int128_t>(acc_CUDA[index].y) % static_cast<__int128_t>(Q));
+                    if (acc_CUDA[index].y < 0)
+                        acc_CUDA[index].y += static_cast<double>(Q);
+                    // IFFT::stride shows how elements from a single FFT should be split between threads
+                    index += IFFT::stride;
+                    twist_idx += IFFT::stride;
+                }
+            }
         }
-        // polynomial b
-        for (uint32_t i = tid; i < NHalf; i += bdim){
-            acc_CUDA[NHalf + i].x = fma(shared_mem[NHalf + i].x, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[NHalf + i].x);
-            acc_CUDA[NHalf + i].x = fma(-shared_mem[NHalf + i].y, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[NHalf + i].x);
-            acc_CUDA[NHalf + i].y = fma(shared_mem[NHalf + i].x, monomial_CUDA[indexNeg*NHalf + i].y, acc_CUDA[NHalf + i].y);
-            acc_CUDA[NHalf + i].y = fma(shared_mem[NHalf + i].y, monomial_CUDA[indexNeg*NHalf + i].x, acc_CUDA[NHalf + i].y);
-        }        
+        else{ // must meet syncs made by IFFT
+            for(uint32_t i = 0; i < syncNum; ++i)
+                __syncthreads();
+        }
         __syncthreads();
     }
-
-    /* 2 times Inverse IFFT */
-    if(threadIdx.y < 2){
-        // Load data from shared memory to registers
-        {
-            unsigned int index = offset + threadIdx.x;
-            for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
-                thread_data[i] = complex_type {acc_CUDA[index].x, acc_CUDA[index].y};
-                // FFT::stride shows how elements from a single FFT should be split between threads
-                index += IFFT::stride;
-            }
-        }
-
-        // Scale values
-        double scale = 1.0 / cufftdx::size_of<IFFT>::value;
-        for (unsigned int i = 0; i < IFFT::elements_per_thread; i++) {
-            thread_data[i].x *= scale;
-            thread_data[i].y *= scale;
-        }
-
-        IFFT().execute(thread_data, shared_mem);
-    
-        // Save results
-        {
-            unsigned int index = offset + threadIdx.x;
-            unsigned int twist_idx = threadIdx.x;
-            for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
-                acc_CUDA[index].x = thread_data[i].x;
-                acc_CUDA[index].y = thread_data[i].y;
-                // twisting
-                acc_CUDA[index] = cuCmul(acc_CUDA[index], twiddleTable_CUDA[twist_idx + NHalf]);
-                // Round to INT128 and MOD
-                acc_CUDA[index].x = static_cast<double>(static_cast<__int128_t>(rint(acc_CUDA[index].x)) % static_cast<__int128_t>(Q));
-                if (acc_CUDA[index].x < 0)
-                    acc_CUDA[index].x += static_cast<double>(Q);
-                acc_CUDA[index].y = static_cast<double>(static_cast<__int128_t>(rint(acc_CUDA[index].y)) % static_cast<__int128_t>(Q));
-                if (acc_CUDA[index].y < 0)
-                    acc_CUDA[index].y += static_cast<double>(Q);
-                // IFFT::stride shows how elements from a single FFT should be split between threads
-                index += IFFT::stride;
-                twist_idx += FFT::stride;
-            }
-        }
-    }
-    else{ // must meet syncs made by IFFT
-       for(uint32_t i = 0; i < syncNum; ++i)
-            __syncthreads();
-    }
-    __syncthreads();
 
     /****************************************
     * the accumulator result is encrypted w.r.t. the transposed secret key
@@ -825,7 +649,7 @@ __global__ void cuFFTDxFWD(Complex_d* data, Complex_d* twiddleTable_CUDA){
     }
 }
 
-void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> GINX_bootstrappingKey_FFT, 
+void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> bootstrappingKey_FFT, 
     const std::shared_ptr<RingGSWCryptoParams> RGSWParams, LWESwitchingKey keySwitchingKey, const std::shared_ptr<LWECryptoParams> LWEParams)
 {
     std::cout << "GPU Setup Start\n";
@@ -876,22 +700,22 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
                 case 512:
                     switch (digitsG2){
                         case 2:
-                            GPUSetup_core<700, 512, 2>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 512, 2>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 4:
-                            GPUSetup_core<700, 512, 4>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 512, 4>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 6:
-                            GPUSetup_core<700, 512, 6>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 512, 6>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 8:
-                            GPUSetup_core<700, 512, 8>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 512, 8>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 10:
-                            GPUSetup_core<700, 512, 10>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 512, 10>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 12:
-                            GPUSetup_core<700, 512, 12>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 512, 12>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -901,22 +725,22 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
                 case 1024:
                     switch (digitsG2){
                         case 2:
-                            GPUSetup_core<700, 1024, 2>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 1024, 2>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 4:
-                            GPUSetup_core<700, 1024, 4>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 1024, 4>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 6:
-                            GPUSetup_core<700, 1024, 6>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 1024, 6>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 8:
-                            GPUSetup_core<700, 1024, 8>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 1024, 8>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 10:
-                            GPUSetup_core<700, 1024, 10>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 1024, 10>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 12:
-                            GPUSetup_core<700, 1024, 12>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 1024, 12>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -926,22 +750,22 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
                 case 2048:
                     switch (digitsG2){
                         case 2:
-                            GPUSetup_core<700, 2048, 2>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 2048, 2>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 4:
-                            GPUSetup_core<700, 2048, 4>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 2048, 4>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 6:
-                            GPUSetup_core<700, 2048, 6>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 2048, 6>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 8:
-                            GPUSetup_core<700, 2048, 8>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 2048, 8>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 10:
-                            GPUSetup_core<700, 2048, 10>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 2048, 10>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 12:
-                            GPUSetup_core<700, 2048, 12>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<700, 2048, 12>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -958,22 +782,22 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
                 case 512:
                     switch (digitsG2){
                         case 2:
-                            GPUSetup_core<800, 512, 2>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 512, 2>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 4:
-                            GPUSetup_core<800, 512, 4>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 512, 4>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 6:
-                            GPUSetup_core<800, 512, 6>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 512, 6>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 8:
-                            GPUSetup_core<800, 512, 8>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 512, 8>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 10:
-                            GPUSetup_core<800, 512, 10>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 512, 10>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 12:
-                            GPUSetup_core<800, 512, 12>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 512, 12>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -983,22 +807,22 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
                 case 1024:
                     switch (digitsG2){
                         case 2:
-                            GPUSetup_core<800, 1024, 2>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 1024, 2>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 4:
-                            GPUSetup_core<800, 1024, 4>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 1024, 4>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 6:
-                            GPUSetup_core<800, 1024, 6>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 1024, 6>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 8:
-                            GPUSetup_core<800, 1024, 8>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 1024, 8>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 10:
-                            GPUSetup_core<800, 1024, 10>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 1024, 10>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 12:
-                            GPUSetup_core<800, 1024, 12>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 1024, 12>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1008,22 +832,22 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
                 case 2048:
                     switch (digitsG2){
                         case 2:
-                            GPUSetup_core<800, 2048, 2>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 2048, 2>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 4:
-                            GPUSetup_core<800, 2048, 4>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 2048, 4>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 6:
-                            GPUSetup_core<800, 2048, 6>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 2048, 6>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 8:
-                            GPUSetup_core<800, 2048, 8>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 2048, 8>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 10:
-                            GPUSetup_core<800, 2048, 10>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 2048, 10>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 12:
-                            GPUSetup_core<800, 2048, 12>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<800, 2048, 12>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1040,22 +864,22 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
                 case 512:
                     switch (digitsG2){
                         case 2:
-                            GPUSetup_core<860, 512, 2>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 512, 2>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 4:
-                            GPUSetup_core<860, 512, 4>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 512, 4>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 6:
-                            GPUSetup_core<860, 512, 6>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 512, 6>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 8:
-                            GPUSetup_core<860, 512, 8>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 512, 8>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 10:
-                            GPUSetup_core<860, 512, 10>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 512, 10>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 12:
-                            GPUSetup_core<860, 512, 12>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 512, 12>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1065,22 +889,22 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
                 case 1024:
                     switch (digitsG2){
                         case 2:
-                            GPUSetup_core<860, 1024, 2>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 1024, 2>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 4:
-                            GPUSetup_core<860, 1024, 4>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 1024, 4>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 6:
-                            GPUSetup_core<860, 1024, 6>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 1024, 6>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 8:
-                            GPUSetup_core<860, 1024, 8>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 1024, 8>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 10:
-                            GPUSetup_core<860, 1024, 10>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 1024, 10>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 12:
-                            GPUSetup_core<860, 1024, 12>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 1024, 12>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1090,22 +914,22 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
                 case 2048:
                     switch (digitsG2){
                         case 2:
-                            GPUSetup_core<860, 2048, 2>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 2048, 2>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 4:
-                            GPUSetup_core<860, 2048, 4>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 2048, 4>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 6:
-                            GPUSetup_core<860, 2048, 6>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 2048, 6>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 8:
-                            GPUSetup_core<860, 2048, 8>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 2048, 8>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 10:
-                            GPUSetup_core<860, 2048, 10>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 2048, 10>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 12:
-                            GPUSetup_core<860, 2048, 12>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<860, 2048, 12>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1122,22 +946,22 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
                 case 512:
                     switch (digitsG2){
                         case 2:
-                            GPUSetup_core<890, 512, 2>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 512, 2>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 4:
-                            GPUSetup_core<890, 512, 4>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 512, 4>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 6:
-                            GPUSetup_core<890, 512, 6>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 512, 6>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 8:
-                            GPUSetup_core<890, 512, 8>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 512, 8>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 10:
-                            GPUSetup_core<890, 512, 10>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 512, 10>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 12:
-                            GPUSetup_core<890, 512, 12>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 512, 12>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1147,22 +971,22 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
                 case 1024:
                     switch (digitsG2){
                         case 2:
-                            GPUSetup_core<890, 1024, 2>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 1024, 2>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 4:
-                            GPUSetup_core<890, 1024, 4>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 1024, 4>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 6:
-                            GPUSetup_core<890, 1024, 6>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 1024, 6>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 8:
-                            GPUSetup_core<890, 1024, 8>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 1024, 8>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 10:
-                            GPUSetup_core<890, 1024, 10>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 1024, 10>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 12:
-                            GPUSetup_core<890, 1024, 12>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 1024, 12>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1172,22 +996,22 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
                 case 2048:
                     switch (digitsG2){
                         case 2:
-                            GPUSetup_core<890, 2048, 2>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 2048, 2>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 4:
-                            GPUSetup_core<890, 2048, 4>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 2048, 4>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 6:
-                            GPUSetup_core<890, 2048, 6>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 2048, 6>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 8:
-                            GPUSetup_core<890, 2048, 8>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 2048, 8>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 10:
-                            GPUSetup_core<890, 2048, 10>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 2048, 10>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 12:
-                            GPUSetup_core<890, 2048, 12>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<890, 2048, 12>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1204,22 +1028,22 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
                 case 512:
                     switch (digitsG2){
                         case 2:
-                            GPUSetup_core<900, 512, 2>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 512, 2>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 4:
-                            GPUSetup_core<900, 512, 4>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 512, 4>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 6:
-                            GPUSetup_core<900, 512, 6>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 512, 6>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 8:
-                            GPUSetup_core<900, 512, 8>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 512, 8>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 10:
-                            GPUSetup_core<900, 512, 10>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 512, 10>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 12:
-                            GPUSetup_core<900, 512, 12>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 512, 12>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1229,22 +1053,22 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
                 case 1024:
                     switch (digitsG2){
                         case 2:
-                            GPUSetup_core<900, 1024, 2>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 1024, 2>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 4:
-                            GPUSetup_core<900, 1024, 4>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 1024, 4>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 6:
-                            GPUSetup_core<900, 1024, 6>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 1024, 6>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 8:
-                            GPUSetup_core<900, 1024, 8>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 1024, 8>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 10:
-                            GPUSetup_core<900, 1024, 10>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 1024, 10>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 12:
-                            GPUSetup_core<900, 1024, 12>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 1024, 12>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1254,22 +1078,22 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
                 case 2048:
                     switch (digitsG2){
                         case 2:
-                            GPUSetup_core<900, 2048, 2>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 2048, 2>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 4:
-                            GPUSetup_core<900, 2048, 4>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 2048, 4>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 6:
-                            GPUSetup_core<900, 2048, 6>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 2048, 6>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 8:
-                            GPUSetup_core<900, 2048, 8>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 2048, 8>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 10:
-                            GPUSetup_core<900, 2048, 10>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 2048, 10>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         case 12:
-                            GPUSetup_core<900, 2048, 12>(GINX_bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                            GPUSetup_core<900, 2048, 12>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
                             break;
                         default:
                             std::cerr << "Unsupported digitsG\n";
@@ -1290,7 +1114,7 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
 }
 
 template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
-void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> GINX_bootstrappingKey_FFT, 
+void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> bootstrappingKey_FFT, 
     const std::shared_ptr<RingGSWCryptoParams> RGSWParams, LWESwitchingKey keySwitchingKey, const std::shared_ptr<LWECryptoParams> LWEParams)
 {
     /* HE Parameters Set */
@@ -1343,16 +1167,16 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     }
 
     /* Initialize bootstrapping key */
-    Complex *bootstrappingKey;
-    cudaMallocHost((void**)&bootstrappingKey, 2 * n * RGSW_size * sizeof(Complex)); // ternery needs two secret keys
+    Complex *bootstrappingKey_host;
+    cudaMallocHost((void**)&bootstrappingKey_host, 2 * n * RGSW_size * sizeof(Complex)); // ternery needs two secret keys
     for(int num_key = 0; num_key < 2; num_key++){
         for(int i = 0; i < n; i++){
             for(int l = 0; l < digitsG2; l++){
                 for(int m = 0; m < 2; m++){
-                    std::vector<Complex> temp = (*(*GINX_bootstrappingKey_FFT)[0][num_key][i])[l][m];
+                    std::vector<Complex> temp = (*(*bootstrappingKey_FFT)[0][num_key][i])[l][m];
                     DiscreteFourierTransform::NegacyclicInverseTransform(temp);
                     for(int j = 0; j < NHalf; j++){
-                        bootstrappingKey[num_key*n*RGSW_size + i*RGSW_size + l*2*NHalf + m*NHalf + j] = Complex(temp[j].real(), temp[j + NHalf].real());
+                        bootstrappingKey_host[num_key*n*RGSW_size + i*RGSW_size + l*2*NHalf + m*NHalf + j] = Complex(temp[j].real(), temp[j + NHalf].real());
                     }
                 }
             }
@@ -1485,7 +1309,7 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
 
         // Bring bootstrapping key to GPU
         cudaMalloc(&GPUVec[g].GINX_bootstrappingKey_CUDA, 2 * n * RGSW_size * sizeof(Complex_d));
-        cudaMemcpy(GPUVec[g].GINX_bootstrappingKey_CUDA, bootstrappingKey, 2 * n * RGSW_size * sizeof(Complex_d), cudaMemcpyHostToDevice);
+        cudaMemcpy(GPUVec[g].GINX_bootstrappingKey_CUDA, bootstrappingKey_host, 2 * n * RGSW_size * sizeof(Complex_d), cudaMemcpyHostToDevice);
         cuFFTDxFWD<FFT_fwd><<<2 * n * digitsG2 * 2, FFT_fwd::block_dim, FFT_fwd::shared_memory_size>>>(GPUVec[g].GINX_bootstrappingKey_CUDA, GPUVec[g].twiddleTable_CUDA);
 
         // Bring keySwitching key to GPU
@@ -1522,7 +1346,7 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     /* Free all host memories */
     cudaFreeHost(twiddleTable);
     cudaFreeHost(paramters);
-    cudaFreeHost(bootstrappingKey);
+    cudaFreeHost(bootstrappingKey_host);
     cudaFreeHost(keySwitchingkey_host);
     cudaFreeHost(monomial_arr);
 }
@@ -2536,11 +2360,9 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     cudaMallocHost((void**)&acc_d_arr, bootstrap_num * 2 * NHalf * sizeof(Complex));
     for (int s = 0; s < bootstrap_num; s++){
         for(int i = 0; i < 2; i++){
-            NativePoly acc_t((*acc)[s]->GetElements()[i]);
+            NativePoly& acc_t((*acc)[s]->GetElements()[i]);
             for(int j = 0; j < NHalf; j++){
-                int64_t d1 = (acc_t[j] < QHalf) ? acc_t[j].ConvertToInt() : (acc_t[j].ConvertToInt() - Q_int);
-                int64_t d2 = (acc_t[j + NHalf] < QHalf) ? acc_t[j + NHalf].ConvertToInt() : (acc_t[j + NHalf].ConvertToInt() - Q_int);
-                acc_d_arr[s*2*NHalf + i*NHalf + j] = Complex(static_cast<double>(d1), static_cast<double>(d2));
+                acc_d_arr[s*2*NHalf + i*NHalf + j] = Complex(static_cast<double>(acc_t[j].ConvertToInt()), static_cast<double>(acc_t[j + NHalf].ConvertToInt()));
             }
         }
     }
@@ -2710,7 +2532,7 @@ void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_p
 //         cudaFreeHost(input[s]);
 //         cudaStreamDestroy(streams[s]);
 //     }
-//     cudaFreeHost(bootstrappingKey);
+//     cudaFreeHost(bootstrappingKey_host);
 // }
 
 // /* Debugging txt files */
