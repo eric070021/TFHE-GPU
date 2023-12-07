@@ -76,7 +76,7 @@ public:
    * @param acc previous value of the accumulator
    */
     virtual void EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, RLWECiphertext& acc,
-                         const NativeVector& a) const {
+                         const NativeVector& a, std::string mode) const {
         OPENFHE_THROW(not_implemented_error, "ACC operation not supported");
     }
 

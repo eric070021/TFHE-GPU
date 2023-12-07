@@ -487,7 +487,7 @@ RLWECiphertext BinFHEScheme::BootstrapGateCore(const std::shared_ptr<BinFHECrypt
     // the following loop is the bottleneck of bootstrapping/binary gate
     // evaluation
     auto acc = std::make_shared<RLWECiphertextImpl>(std::move(res));
-    ACCscheme->EvalAcc(RGSWParams, ek, acc, ct->GetA());
+    ACCscheme->EvalAcc(RGSWParams, ek, acc, ct->GetA(), "NTT");
     return acc;
 }
 
@@ -496,7 +496,7 @@ RLWECiphertext BinFHEScheme::BootstrapGateCore(const std::shared_ptr<BinFHECrypt
 // funciton evaluation, from https://eprint.iacr.org/2021/1337
 template <typename Func>
 RLWECiphertext BinFHEScheme::BootstrapFuncCore(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWACCKey ek,
-                                               ConstLWECiphertext ct, const Func f, const NativeInteger fmod) const {
+                                               ConstLWECiphertext ct, const Func f, const NativeInteger fmod, std::string mode) const {
     if (ek == nullptr) {
         std::string errMsg =
             "Bootstrapping keys have not been generated. Please call BTKeyGen before calling bootstrapping.";
@@ -529,7 +529,7 @@ RLWECiphertext BinFHEScheme::BootstrapFuncCore(const std::shared_ptr<BinFHECrypt
     // the following loop is the bottleneck of bootstrapping/binary gate
     // evaluation
     auto acc = std::make_shared<RLWECiphertextImpl>(std::move(res));
-    ACCscheme->EvalAcc(RGSWParams, ek, acc, ct->GetA());
+    ACCscheme->EvalAcc(RGSWParams, ek, acc, ct->GetA(), mode);
     return acc;
 }
 
@@ -537,7 +537,7 @@ RLWECiphertext BinFHEScheme::BootstrapFuncCore(const std::shared_ptr<BinFHECrypt
 template <typename Func>
 LWECiphertext BinFHEScheme::BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                                           ConstLWECiphertext ct, const Func f, const NativeInteger fmod) const {
-    auto acc = BootstrapFuncCore(params, EK.BSkey, ct, f, fmod);
+    auto acc = BootstrapFuncCore(params, EK.BSkey, ct, f, fmod, "NTT");
 
     std::vector<NativePoly>& accVec = acc->GetElements();
     // the accumulator result is encrypted w.r.t. the transposed secret key

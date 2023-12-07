@@ -69,7 +69,7 @@ public:
    * @param acc previous value of the accumulator
    */
     void EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, RLWECiphertext& acc,
-                 const NativeVector& a) const override;
+                 const NativeVector& a, std::string mode = "NTT") const override;
 
     /**
    * Main accumulator function used in vector bootstrappings - AP variant

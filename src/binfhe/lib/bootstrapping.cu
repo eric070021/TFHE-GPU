@@ -104,38 +104,11 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
     const unsigned int local_fft_id = threadIdx.y;
     const unsigned int offset = cufftdx::size_of<FFT>::value * (blockIdx.x * FFT::ffts_per_block + local_fft_id);
     extern __shared__ complex_type shared_mem[];
-    complex_type thread_data[FFT::storage_size];     
+    complex_type thread_data[FFT::storage_size];
 
-     for(uint32_t round = 0; round < n; ++round){
+    for(uint32_t round = 0; round < n; ++round){
         /* SignedDigitDecompose */
-        // polynomial from a
-        for (size_t k = gtid; k < NHalf; k += gdim) {
-            const uint64_t& t1 = static_cast<uint64_t>(acc_CUDA[k].x);
-            const uint64_t& t2 = static_cast<uint64_t>(acc_CUDA[k].y);
-            int64_t d0 = (t1 < QHalf) ? static_cast<int64_t>(t1) : (static_cast<int64_t>(t1) - static_cast<int64_t>(Q));
-            int64_t d1 = (t2 < QHalf) ? static_cast<int64_t>(t2) : (static_cast<int64_t>(t2) - static_cast<int64_t>(Q));
-
-            for (size_t l = 0; l < digitsG2; l += 2) {
-                int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
-                d0 = (d0 - r0) >> gBits;
-                if (r0 < 0)
-                    r0 += static_cast<int64_t>(Q);
-                if (r0 >= QHalf)
-                    r0 -= static_cast<int64_t>(Q);
-                dct_CUDA[l*NHalf + k].x = static_cast<double>(r0);
-
-                int64_t r1 = (d1 << gBitsMaxBits) >> gBitsMaxBits;
-                d1 = (d1 - r1) >> gBits;
-                if (r1 < 0)
-                    r1 += static_cast<int64_t>(Q);
-                if (r1 >= QHalf)
-                    r1 -= static_cast<int64_t>(Q);
-                dct_CUDA[l*NHalf + k].y = static_cast<double>(r1);
-            }
-        }
-
-        // polynomial from b
-        for (size_t k = gtid + NHalf; k < N; k += gdim) {
+        for (size_t k = gtid; k < N; k += gdim) { // 0~NHalf-1: a, NHalf~N-1: b
             const uint64_t& t1 = static_cast<uint64_t>(acc_CUDA[k].x);
             const uint64_t& t2 = static_cast<uint64_t>(acc_CUDA[k].y);
             int64_t d0 = (t1 < QHalf) ? static_cast<int64_t>(t1) : (static_cast<int64_t>(t1) - static_cast<int64_t>(Q));
@@ -377,34 +350,7 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
 
     for(uint32_t round = 0; round < n; ++round){
         /* SignedDigitDecompose */
-        // polynomial from a
-        for (size_t k = tid; k < NHalf; k += bdim) {
-            const uint64_t& t1 = static_cast<uint64_t>(acc_CUDA[k].x);
-            const uint64_t& t2 = static_cast<uint64_t>(acc_CUDA[k].y);
-            int64_t d0 = (t1 < QHalf) ? static_cast<int64_t>(t1) : (static_cast<int64_t>(t1) - static_cast<int64_t>(Q));
-            int64_t d1 = (t2 < QHalf) ? static_cast<int64_t>(t2) : (static_cast<int64_t>(t2) - static_cast<int64_t>(Q));
-
-            for (size_t l = 0; l < digitsG2; l += 2) {
-                int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
-                d0 = (d0 - r0) >> gBits;
-                if (r0 < 0)
-                    r0 += static_cast<int64_t>(Q);
-                if (r0 >= QHalf)
-                    r0 -= static_cast<int64_t>(Q);
-                dct_CUDA[l*NHalf + k].x = static_cast<double>(r0);
-
-                int64_t r1 = (d1 << gBitsMaxBits) >> gBitsMaxBits;
-                d1 = (d1 - r1) >> gBits;
-                if (r1 < 0)
-                    r1 += static_cast<int64_t>(Q);
-                if (r1 >= QHalf)
-                    r1 -= static_cast<int64_t>(Q);
-                dct_CUDA[l*NHalf + k].y = static_cast<double>(r1);
-            }
-        }
-
-        // polynomial from b
-        for (size_t k = tid + NHalf; k < N; k += bdim) {
+        for (size_t k = tid; k < N; k += bdim) { // 0~NHalf-1: a, NHalf~N-1: b
             const uint64_t& t1 = static_cast<uint64_t>(acc_CUDA[k].x);
             const uint64_t& t2 = static_cast<uint64_t>(acc_CUDA[k].y);
             int64_t d0 = (t1 < QHalf) ? static_cast<int64_t>(t1) : (static_cast<int64_t>(t1) - static_cast<int64_t>(Q));
@@ -469,6 +415,12 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
             indexPos = 0;
         if (indexNeg == M)
             indexNeg = 0;
+
+        /* Initialize shared_mem */
+        for(uint32_t i = tid; i < N; i += bdim){
+            shared_mem[i] = complex_type {0.0, 0.0};
+        }
+        __syncthreads();
 
         /* ACC times Bootstrapping key and monomial */
         /* multiply with ek0 */
@@ -1147,20 +1099,20 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     }
 
     /* Initialize params_CUDA */
-    uint64_t *paramters;
-    cudaMallocHost((void**)&paramters, 10 * sizeof(uint64_t));
-    paramters[0] = n;
-    paramters[1] = N;
-    paramters[2] = q_int;
-    paramters[3] = Q_int;
-    paramters[4] = baseG;
-    paramters[5] = digitsG2;
-    paramters[6] = qKS_int;
-    paramters[7] = baseKS;
-    paramters[8] = digitCountKS;
+    uint64_t *parameters;
+    cudaMallocHost((void**)&parameters, 10 * sizeof(uint64_t));
+    parameters[0] = n;
+    parameters[1] = N;
+    parameters[2] = q_int;
+    parameters[3] = Q_int;
+    parameters[4] = baseG;
+    parameters[5] = digitsG2;
+    parameters[6] = qKS_int;
+    parameters[7] = baseKS;
+    parameters[8] = digitCountKS;
     auto it = synchronizationMap.find({arch, FFT_dimension});
     if (it != synchronizationMap.end() && it->second != 0) {
-        paramters[9] = static_cast<uint64_t>(it->second);
+        parameters[9] = static_cast<uint64_t>(it->second);
     } else {
         std::cerr << "Hasn't tested on this GPU yet, please contact r11922138@ntu.edu.tw" << std::endl;
         exit(1);
@@ -1305,7 +1257,7 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
 
         // Bring params_CUDA to GPU
         cudaMalloc(&GPUVec[g].params_CUDA, 10 * sizeof(uint64_t));
-        cudaMemcpy(GPUVec[g].params_CUDA, paramters, 10 * sizeof(uint64_t), cudaMemcpyHostToDevice);
+        cudaMemcpy(GPUVec[g].params_CUDA, parameters, 10 * sizeof(uint64_t), cudaMemcpyHostToDevice);
 
         // Bring bootstrapping key to GPU
         cudaMalloc(&GPUVec[g].GINX_bootstrappingKey_CUDA, 2 * n * RGSW_size * sizeof(Complex_d));
@@ -1345,7 +1297,7 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
 
     /* Free all host memories */
     cudaFreeHost(twiddleTable);
-    cudaFreeHost(paramters);
+    cudaFreeHost(parameters);
     cudaFreeHost(bootstrappingKey_host);
     cudaFreeHost(keySwitchingkey_host);
     cudaFreeHost(monomial_arr);

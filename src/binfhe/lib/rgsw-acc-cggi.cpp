@@ -141,36 +141,96 @@ RingGSWACCKey RingGSWAccumulatorCGGI::KeyGenAcc(const std::shared_ptr<RingGSWCry
 }
 
 void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek,
-                                     RLWECiphertext& acc, const NativeVector& a) const {
-    
-    /* HE parameters set */
-    auto mod        = a.GetModulus();
-    uint32_t n      = a.GetLength();
-    uint32_t M      = 2 * params->GetN();
-    uint32_t modInt = mod.ConvertToInt();
+                                     RLWECiphertext& acc, const NativeVector& a, std::string mode) const {       
+    if(mode == "NTT"){
+        auto mod        = a.GetModulus();
+        uint32_t n      = a.GetLength();
+        uint32_t M      = 2 * params->GetN();
+        uint32_t modInt = mod.ConvertToInt();
 
-    NativeInteger Q = params->GetQ();
-    uint32_t  N     = params->GetN();
-    auto polyParams = params->GetPolyParams();
+        for (size_t i = 0; i < n; ++i) {
+            // handles -a*E(1) and handles -a*E(-1) = a*E(1)
+            AddToAccCGGI(params, (*ek)[0][0][i], (*ek)[0][1][i], mod.ModSub(a[i], mod) * (M / modInt), acc);
+        }
+    }
+    else if(mode == "FFT"){
+        auto mod        = a.GetModulus();
+        uint32_t n      = a.GetLength();
+        uint32_t M      = 2 * params->GetN();
+        uint32_t modInt = mod.ConvertToInt();
+        NativeInteger Q = params->GetQ();
+        uint32_t N      = params->GetN();
+        auto polyParams = params->GetPolyParams();
 
-    // cast acc to BasicFloat
-    NativePoly acc0(acc->GetElements()[0]), acc1(acc->GetElements()[1]);
-    acc0.SetFormat(Format::COEFFICIENT);
-    acc1.SetFormat(Format::COEFFICIENT);
-    std::vector<std::vector<Complex>> acc_d(2, std::vector<Complex>(N, Complex(0.0, 0.0)));
-    for (size_t i = 0; i < N; ++i) {
-        acc_d[0][i].real(static_cast<BasicFloat>(acc0[i].ConvertToInt()));
-        acc_d[1][i].real(static_cast<BasicFloat>(acc1[i].ConvertToInt()));
+        // cast acc to BasicFloat
+        NativePoly acc0(acc->GetElements()[0]), acc1(acc->GetElements()[1]);
+        acc0.SetFormat(Format::COEFFICIENT);
+        acc1.SetFormat(Format::COEFFICIENT);
+        std::vector<std::vector<Complex>> acc_d(2, std::vector<Complex>(N, Complex(0.0, 0.0)));
+        for (size_t i = 0; i < N; ++i) {
+            acc_d[0][i].real(static_cast<BasicFloat>(acc0[i].ConvertToInt()));
+            acc_d[1][i].real(static_cast<BasicFloat>(acc1[i].ConvertToInt()));
+        }
+
+        // Blind rotate
+        for (size_t i = 0; i < n; ++i) {
+            // handles -a*E(1) and handles -a*E(-1) = a*E(1)
+            AddToAccCGGI_FFT(params, (*GINX_bootstrappingKey_FFT)[0][0][i], (*GINX_bootstrappingKey_FFT)[0][1][i], mod.ModSub(a[i], mod) * (M / modInt), acc_d);
+        }
+
+        // cast acc_d to NativePoly
+        NativeVector ret0(N, Q), ret1(N, Q);
+        for (size_t i = 0; i < N; ++i) {
+            ret0[i] = static_cast<BasicInteger>(acc_d[0][i].real());
+            ret1[i] = static_cast<BasicInteger>(acc_d[1][i].real());
+        }
+        std::vector<NativePoly> res(2);
+        res[0] = NativePoly(polyParams, Format::COEFFICIENT, false);
+        res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
+        res[0].SetValues(std::move(ret0), Format::COEFFICIENT);
+        res[1].SetValues(std::move(ret1), Format::COEFFICIENT);
+        res[0].SetFormat(Format::EVALUATION);
+        res[1].SetFormat(Format::EVALUATION);
+        acc = std::make_shared<RLWECiphertextImpl>(std::move(res));
+    }
+    else if(mode == "GPU"){
+        NativeInteger Q = params->GetQ();
+        uint32_t N      = params->GetN();
+        auto polyParams = params->GetPolyParams();
+
+        // cast acc to BasicFloat
+        NativePoly acc0(acc->GetElements()[0]), acc1(acc->GetElements()[1]);
+        acc0.SetFormat(Format::COEFFICIENT);
+        acc1.SetFormat(Format::COEFFICIENT);
+        std::vector<std::vector<Complex>> acc_d(2, std::vector<Complex>(N, Complex(0.0, 0.0)));
+        for (size_t i = 0; i < N; ++i) {
+            acc_d[0][i].real(static_cast<BasicFloat>(acc0[i].ConvertToInt()));
+            acc_d[1][i].real(static_cast<BasicFloat>(acc1[i].ConvertToInt()));
+        }
+
+        // Blind rotate
+        AddToAccCGGI_CUDA(params, a, acc_d, "SINGLE");
+
+        // cast acc_d to NativePoly
+        NativeVector ret0(N, Q), ret1(N, Q);
+        for (size_t i = 0; i < N; ++i) {
+            ret0[i] = static_cast<BasicInteger>(acc_d[0][i].real());
+            ret1[i] = static_cast<BasicInteger>(acc_d[1][i].real());
+        }
+        std::vector<NativePoly> res(2);
+        res[0] = NativePoly(polyParams, Format::COEFFICIENT, false);
+        res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
+        res[0].SetValues(std::move(ret0), Format::COEFFICIENT);
+        res[1].SetValues(std::move(ret1), Format::COEFFICIENT);
+        res[0].SetFormat(Format::EVALUATION);
+        res[1].SetFormat(Format::EVALUATION);
+        acc = std::make_shared<RLWECiphertextImpl>(std::move(res));
+    }
+    else{
+        std::string errMsg = "ERROR: Transform mode not supported.";
+        OPENFHE_THROW(not_implemented_error, errMsg);
     }
 
-    // AddToAccCGGI_CUDA(params, a, acc_d, "SINGLE");
-
-    for (size_t i = 0; i < n; ++i) {
-        // handles -a*E(1) and handles -a*E(-1) = a*E(1)
-        //AddToAccCGGI(params, (*ek)[0][0][i], (*ek)[0][1][i], mod.ModSub(a[i], mod) * (M / modInt), acc);
-        AddToAccCGGI_FFT(params, (*GINX_bootstrappingKey_FFT)[0][0][i], (*GINX_bootstrappingKey_FFT)[0][1][i], mod.ModSub(a[i], mod) * (M / modInt), acc_d);
-    }
-   
     // std::vector<NativePoly> acc_t = acc->GetElements();
     // acc_t[0].SetFormat(Format::COEFFICIENT);
     // acc_t[1].SetFormat(Format::COEFFICIENT);
@@ -186,21 +246,6 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
     //     for(uint32_t j = 0; j < N ; j++)
     //         outputFile << static_cast<BasicInteger>(acc_d[i][j].real()) << std::endl;
     // outputFile.close();
-
-    // cast acc_d to NativePoly
-    NativeVector ret0(N, Q), ret1(N, Q);
-    for (size_t i = 0; i < N; ++i) {
-        ret0[i] = static_cast<BasicInteger>(acc_d[0][i].real());
-        ret1[i] = static_cast<BasicInteger>(acc_d[1][i].real());
-    }
-    std::vector<NativePoly> res(2);
-    res[0] = NativePoly(polyParams, Format::COEFFICIENT, false);
-    res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
-    res[0].SetValues(std::move(ret0), Format::COEFFICIENT);
-    res[1].SetValues(std::move(ret1), Format::COEFFICIENT);
-    res[0].SetFormat(Format::EVALUATION);
-    res[1].SetFormat(Format::EVALUATION);
-    acc = std::make_shared<RLWECiphertextImpl>(std::move(res));
 }
 
 void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, 

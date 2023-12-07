@@ -239,7 +239,7 @@ private:
    */
     template <typename Func>
     RLWECiphertext BootstrapFuncCore(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWACCKey ek,
-                                     ConstLWECiphertext ct, const Func f, const NativeInteger fmod) const;
+                                     ConstLWECiphertext ct, const Func f, const NativeInteger fmod, std::string mode = "NTT") const;
 
     /**
    * Bootstraps a fresh ciphertext
