@@ -65,7 +65,7 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
 /* Single Big thread blocks mode bootstrapping */
 template<class FFT, class IFFT>
 __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
-        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* params_CUDA);
+        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* params_CUDA, uint32_t syncNum);
 
 /* cufftdx forward function to preprocess BTKey and monomial */
 template<class FFT>
@@ -107,7 +107,7 @@ struct syncKey {
     }
 };
 
-/* Map used in Single block mode */
+/* Synchornization Map used in Single block mode */
 const std::map<syncKey, uint32_t> synchronizationMap({
   // arch | dim | syncNum
     {{700, 512},    8},
@@ -125,6 +125,17 @@ const std::map<syncKey, uint32_t> synchronizationMap({
     {{900, 512},    0},
     {{900, 1024},   0},
     {{900, 2048},   0},
+});
+
+/* Maximum dynamic shared memory amount of GPUs */
+/* CUDA start reserve 1 KB of shared memory per thread block after arch 800 */
+const std::map<uint32_t, int> sharedMemMap({
+  // arch | shared memory capacity (KB)
+    {700,  96}, // V100
+    {800, 163}, // A100
+    {860,  99}, // RTX 3090
+    {890,  99}, // RTX 4090
+    {900, 227}, // H100
 });
 
 /***************************************

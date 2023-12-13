@@ -537,23 +537,61 @@ RLWECiphertext BinFHEScheme::BootstrapFuncCore(const std::shared_ptr<BinFHECrypt
 template <typename Func>
 LWECiphertext BinFHEScheme::BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                                           ConstLWECiphertext ct, const Func f, const NativeInteger fmod) const {
-    auto acc = BootstrapFuncCore(params, EK.BSkey, ct, f, fmod, "NTT");
+    
+    auto acc_FFT = BootstrapFuncCore(params, EK.BSkey, ct, f, fmod, "GPU");
 
-    std::vector<NativePoly>& accVec = acc->GetElements();
+    std::vector<NativePoly>& accVec_FFT = acc_FFT->GetElements();
     // the accumulator result is encrypted w.r.t. the transposed secret key
     // we can transpose "a" to get an encryption under the original secret key
-    accVec[0] = accVec[0].Transpose();
-    accVec[0].SetFormat(Format::COEFFICIENT);
-    accVec[1].SetFormat(Format::COEFFICIENT);
+    //accVec_FFT[0] = accVec_FFT[0].Transpose();
+    accVec_FFT[0].SetFormat(Format::COEFFICIENT);
+    accVec_FFT[1].SetFormat(Format::COEFFICIENT);
 
-    auto ctExt      = std::make_shared<LWECiphertextImpl>(std::move(accVec[0].GetValues()), std::move(accVec[1][0]));
-    auto& LWEParams = params->GetLWEParams();
+    auto ctExt_FFT  = std::make_shared<LWECiphertextImpl>(std::move(accVec_FFT[0].GetValues()), std::move(accVec_FFT[1][0]));
+    auto& LWEParams_FFT = params->GetLWEParams();
     // Modulus switching to a middle step Q'
-    auto ctMS = LWEscheme->ModSwitch(LWEParams->GetqKS(), ctExt);
+    auto ctMS_FFT = LWEscheme->ModSwitch(LWEParams_FFT->GetqKS(), ctExt_FFT);
     // Key switching
-    auto ctKS = LWEscheme->KeySwitch(LWEParams, EK.KSkey, ctMS);
+    auto ctKS_FFT = LWEscheme->KeySwitch(LWEParams_FFT, EK.KSkey, ctMS_FFT);
     // Modulus switching
-    return LWEscheme->ModSwitch(fmod, ctKS);
+    auto ctMS2_FFT = LWEscheme->ModSwitch(fmod, ctKS_FFT);
+
+    // auto acc = BootstrapFuncCore(params, EK.BSkey, ct, f, fmod, "NTT");
+
+    // std::vector<NativePoly>& accVec = acc->GetElements();
+    // // the accumulator result is encrypted w.r.t. the transposed secret key
+    // // we can transpose "a" to get an encryption under the original secret key
+    // accVec[0] = accVec[0].Transpose();
+    // accVec[0].SetFormat(Format::COEFFICIENT);
+    // accVec[1].SetFormat(Format::COEFFICIENT);
+
+    // auto ctExt      = std::make_shared<LWECiphertextImpl>(std::move(accVec[0].GetValues()), std::move(accVec[1][0]));
+    // auto& LWEParams = params->GetLWEParams();
+    // // Modulus switching to a middle step Q'
+    // auto ctMS = LWEscheme->ModSwitch(LWEParams->GetqKS(), ctExt);
+    // // Key switching
+    // auto ctKS = LWEscheme->KeySwitch(LWEParams, EK.KSkey, ctMS);
+    // // Modulus switching
+    // auto ctMS2 = LWEscheme->ModSwitch(fmod, ctKS);
+
+    /************************test*************************/
+    // NativeVector& ct_NTT_A = ctKS->GetA();
+    // std::ofstream outputFile;
+    // outputFile.open("ntt.txt", std::ios::out);
+    // for(uint32_t i = 0; i < ct_NTT_A.GetLength(); i++)
+    //     outputFile << ct_NTT_A[i] << std::endl;
+    // outputFile << ctMS->GetB().ConvertToInt() << std::endl;
+    // outputFile.close();
+
+    // NativeVector& ct_FFT_A = ctKS_FFT->GetA();
+    // outputFile.open("fft.txt", std::ios::out);
+    // for(uint32_t i = 0; i < ct_FFT_A.GetLength(); i++)
+    //     outputFile << ct_FFT_A[i] << std::endl;
+    // outputFile << ctMS_FFT->GetB().ConvertToInt() << std::endl;
+    // outputFile.close();
+    /*****************************************************/
+
+    return ctMS2_FFT;
 }
 
 /**************************************************************************************************************************************

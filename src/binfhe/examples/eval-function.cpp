@@ -85,7 +85,7 @@ int main() {
 
     //     cc.Decrypt(sk, ct_cube, &result, p);
 
-    //     std::cout << "Input: " << i << ". Expected: " << fp(i, p) << ". Evaluated = " << result << std::endl;
+    //     std::cout << "Input: " << i << ". Expected: " << fp(i % p, p) << ". Evaluated = " << result << std::endl;
     // }
     // auto end = std::chrono::high_resolution_clock::now();
     // auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);

@@ -321,7 +321,7 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
 template<class FFT, class IFFT>
 __launch_bounds__(FFT::max_threads_per_block)
 __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
-        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* params_CUDA){
+        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* params_CUDA, uint32_t syncNum){
     
     /* GPU Parameters Set */
     uint32_t tid = ThisThreadRankInBlock();
@@ -339,7 +339,6 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
     const uint32_t RGSW_size    = digitsG2 * 2 * NHalf;
     const int32_t gBits         = static_cast<int32_t>(log2(static_cast<double>(baseG)));
     const int32_t gBitsMaxBits  = 64 - gBits;
-    const uint32_t syncNum      = static_cast<uint32_t>(params_CUDA[9]); // number of synchronization (cufftdx)
 
     /* cufftdx variables */
     using complex_type = typename FFT::value_type;
@@ -1100,7 +1099,7 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
 
     /* Initialize params_CUDA */
     uint64_t *parameters;
-    cudaMallocHost((void**)&parameters, 10 * sizeof(uint64_t));
+    cudaMallocHost((void**)&parameters, 9 * sizeof(uint64_t));
     parameters[0] = n;
     parameters[1] = N;
     parameters[2] = q_int;
@@ -1110,13 +1109,6 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     parameters[6] = qKS_int;
     parameters[7] = baseKS;
     parameters[8] = digitCountKS;
-    auto it = synchronizationMap.find({arch, FFT_dimension});
-    if (it != synchronizationMap.end() && it->second != 0) {
-        parameters[9] = static_cast<uint64_t>(it->second);
-    } else {
-        std::cerr << "Hasn't tested on this GPU yet, please contact r11922138@ntu.edu.tw" << std::endl;
-        exit(1);
-    }
 
     /* Initialize bootstrapping key */
     Complex *bootstrappingKey_host;
@@ -1202,46 +1194,25 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
                             cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<1>() + cufftdx::SM<arch>());
 
         /* Increase max shared memory */
+        auto it = sharedMemMap.find(arch);
+        int maxSharedMemoryAvail = it->second * 1024;
         // Single block Bootstrapping shared memory size
-        if(FFT::shared_memory_size > 65536){
-            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 100));
+        if(FFT::shared_memory_size < maxSharedMemoryAvail){
+            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size));
         }
-        else if(FFT::shared_memory_size > 32768){
-            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
-        }
-        else{
-            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributePreferredSharedMemoryCarveout, 32));
-        }
-        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size));
-
         // Multi block Bootstrapping shared memory size
-        if(FFT_multi::shared_memory_size > 65536){
-            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 100));
+        if(FFT_multi::shared_memory_size < maxSharedMemoryAvail){
+            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_multi::shared_memory_size));
         }
-        else if(FFT_multi::shared_memory_size > 32768){
-            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
-        }
-        else{
-            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributePreferredSharedMemoryCarveout, 32));
-        }
-        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_multi::shared_memory_size));
-
         // MKMSwitch shared memory size
         int MKMSwitch_shared_memory_size = (N + 1) * sizeof(uint64_t);
-        if(MKMSwitch_shared_memory_size > 65536){
-            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 100));
+        if(MKMSwitch_shared_memory_size < maxSharedMemoryAvail){
+            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributeMaxDynamicSharedMemorySize, MKMSwitch_shared_memory_size));
         }
-        else if(MKMSwitch_shared_memory_size > 32768){
-            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
-        }
-        else{
-            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributePreferredSharedMemoryCarveout, 32));
-        }
-        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(MKMSwitchKernel, cudaFuncAttributeMaxDynamicSharedMemorySize, MKMSwitch_shared_memory_size));
-
         // cuFFTDx Forward shared memory size
-        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(cuFFTDxFWD<FFT_fwd>, cudaFuncAttributePreferredSharedMemoryCarveout, 64));
-        CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(cuFFTDxFWD<FFT_fwd>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_fwd::shared_memory_size));
+        if(FFT_fwd::shared_memory_size < maxSharedMemoryAvail){
+            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(cuFFTDxFWD<FFT_fwd>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_fwd::shared_memory_size));
+        }
 
         int SM_count = gpuInfoList[g].multiprocessorCount;
 
@@ -1256,8 +1227,8 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
         cudaMemcpy(GPUVec[g].twiddleTable_CUDA, twiddleTable, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice);
 
         // Bring params_CUDA to GPU
-        cudaMalloc(&GPUVec[g].params_CUDA, 10 * sizeof(uint64_t));
-        cudaMemcpy(GPUVec[g].params_CUDA, parameters, 10 * sizeof(uint64_t), cudaMemcpyHostToDevice);
+        cudaMalloc(&GPUVec[g].params_CUDA, 9 * sizeof(uint64_t));
+        cudaMemcpy(GPUVec[g].params_CUDA, parameters, 9 * sizeof(uint64_t), cudaMemcpyHostToDevice);
 
         // Bring bootstrapping key to GPU
         cudaMalloc(&GPUVec[g].GINX_bootstrappingKey_CUDA, 2 * n * RGSW_size * sizeof(Complex_d));
@@ -1799,9 +1770,17 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
 
     /* Launch boostrapping kernel */
     if(mode == "SINGLE"){
+        uint32_t syncNum;
+        auto it = synchronizationMap.find({arch, FFT_dimension});
+        if (it != synchronizationMap.end() && it->second != 0) {
+            syncNum = it->second;
+        } else {
+            std::cerr << "Hasn't tested on this GPU or N yet, please contact r11922138@ntu.edu.tw" << std::endl;
+            exit(1);
+        }
         bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size>>>
             (GPUVec[0].acc_CUDA, GPUVec[0].ct_CUDA, GPUVec[0].dct_CUDA, GPUVec[0].a_CUDA, 
-                GPUVec[0].monomial_CUDA, GPUVec[0].twiddleTable_CUDA, GPUVec[0].GINX_bootstrappingKey_CUDA, GPUVec[0].params_CUDA);
+                GPUVec[0].monomial_CUDA, GPUVec[0].twiddleTable_CUDA, GPUVec[0].GINX_bootstrappingKey_CUDA, GPUVec[0].params_CUDA, syncNum);
     }
     else if(mode == "MULTI"){
         void *kernelArgs[] = {(void *)&GPUVec[0].acc_CUDA, (void *)&GPUVec[0].ct_CUDA, (void *)&GPUVec[0].dct_CUDA, (void *)&GPUVec[0].a_CUDA, 
@@ -2322,6 +2301,14 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     auto start = std::chrono::high_resolution_clock::now();
 
     if(mode == "SINGLE"){
+        uint32_t syncNum;
+        auto it = synchronizationMap.find({arch, FFT_dimension});
+        if (it != synchronizationMap.end() && it->second != 0) {
+            syncNum = it->second;
+        } else {
+            std::cerr << "Hasn't tested on this GPU or N yet, please contact r11922138@ntu.edu.tw" << std::endl;
+            exit(1);
+        }
         for (int s = 0; s < bootstrap_num; s++) {
             int currentGPU = (s / SM_count) % GPU_num;
             if(s % SM_count == 0){
@@ -2331,7 +2318,7 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
             cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
             bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size, GPUVec[currentGPU].streams[s % SM_count]>>>
                 (GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].ct_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].dct_CUDA + (s % SM_count)*digitsG2*NHalf,
-                    GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, GPUVec[currentGPU].monomial_CUDA, GPUVec[currentGPU].twiddleTable_CUDA, GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, GPUVec[currentGPU].params_CUDA);
+                    GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, GPUVec[currentGPU].monomial_CUDA, GPUVec[currentGPU].twiddleTable_CUDA, GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, GPUVec[currentGPU].params_CUDA, syncNum);
             cudaMemcpyAsync(acc_d_arr + s*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
         }
     }

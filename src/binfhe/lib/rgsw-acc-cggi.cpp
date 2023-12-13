@@ -230,22 +230,6 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
         std::string errMsg = "ERROR: Transform mode not supported.";
         OPENFHE_THROW(not_implemented_error, errMsg);
     }
-
-    // std::vector<NativePoly> acc_t = acc->GetElements();
-    // acc_t[0].SetFormat(Format::COEFFICIENT);
-    // acc_t[1].SetFormat(Format::COEFFICIENT);
-    // std::ofstream outputFile;
-    // outputFile.open("ntt.txt", std::ios::out);
-    // for(uint32_t i = 0; i < 2; i++)
-    //     for(uint32_t j = 0; j < N; j++)
-    //         outputFile << acc_t[i][j] << std::endl;
-    // outputFile.close();
-
-    // outputFile.open("fft.txt", std::ios::out);
-    // for(uint32_t i = 0; i < 2; i++)
-    //     for(uint32_t j = 0; j < N ; j++)
-    //         outputFile << static_cast<BasicInteger>(acc_d[i][j].real()) << std::endl;
-    // outputFile.close();
 }
 
 void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, 
