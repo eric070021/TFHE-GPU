@@ -144,17 +144,9 @@ const std::map<uint32_t, int> sharedMemMap({
 void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> bootstrappingKey_FFT, 
     const std::shared_ptr<RingGSWCryptoParams> RGSWParams, LWESwitchingKey keySwitchingKey, const std::shared_ptr<LWECryptoParams> LWEParams);
 
-template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
+template<uint32_t arch, uint32_t FFT_dimension>
 void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> bootstrappingKey_FFT, 
     const std::shared_ptr<RingGSWCryptoParams> RGSWParams, LWESwitchingKey keySwitchingKey, const std::shared_ptr<LWECryptoParams> LWEParams);
-
-/***************************************
-*  ACC that support single ciphertext 
-****************************************/
-void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d, std::string mode);
-
-template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
-void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const NativeVector& a, std::vector<std::vector<Complex>>& acc_d, std::string mode);
 
 /***************************************
 *  ACC that support vector of ciphertexts 

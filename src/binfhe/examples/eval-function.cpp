@@ -34,6 +34,7 @@
  */
 
 #include "binfhecontext.h"
+#include <algorithm>
 
 using namespace lbcrypto;
 
@@ -101,11 +102,33 @@ int main() {
     auto end = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
     std::cout << "Time: " << elapsed.count() << " ms" << std::endl;
+    //int meanb = 0, maxb = -1;
     for (int i = 0; i < p; i++) {
         LWEPlaintext result;
         cc.Decrypt(sk, ct_cube_vec[i], &result, p);
+        // int b = std::min(abs(static_cast<int64_t>(fp(i % p, p).ConvertToInt() * 256)- result), 4096 - abs(static_cast<int64_t>(fp(i % p, p).ConvertToInt() * 256) - result));
+        // meanb += b;
+        // maxb = std::max(maxb, b);
         std::cout << "Input: " << i << ". Expected: " << fp(i % p, p) << ". Evaluated = " << result << std::endl;
     }
+    // std::cout << "meanb: " << static_cast<double>(meanb) / 16384 << std::endl;
+    // std::cout << "maxb: " << maxb << std::endl;
+
+    // int meanb = 0, maxb = -1;   
+    // for (int i = 0; i < 16384; i++) {
+    //     auto ct1 = cc.Encrypt(sk, i % p, FRESH, p);
+
+    //     auto ct_cube = cc.EvalFunc(ct1, lut);
+
+    //     LWEPlaintext result;
+
+    //     cc.Decrypt(sk, ct_cube, &result, p);
+    //     int b = std::min(abs(static_cast<int64_t>(fp(i % p, p).ConvertToInt() * 256)- result), 4096 - abs(static_cast<int64_t>(fp(i % p, p).ConvertToInt() * 256) - result));
+    //     meanb += b;
+    //     maxb = std::max(maxb, b);
+    // }
+    // std::cout << "meanb: " << static_cast<double>(meanb) / 16384 << std::endl;
+    // std::cout << "maxb: " << maxb << std::endl;
 
     // int failCount = 0;
     // for(int round = 0; round < 100; round++){

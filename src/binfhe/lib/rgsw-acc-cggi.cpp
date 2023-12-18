@@ -194,37 +194,14 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
         acc = std::make_shared<RLWECiphertextImpl>(std::move(res));
     }
     else if(mode == "GPU"){
-        NativeInteger Q = params->GetQ();
-        uint32_t N      = params->GetN();
-        auto polyParams = params->GetPolyParams();
-
-        // cast acc to BasicFloat
-        NativePoly acc0(acc->GetElements()[0]), acc1(acc->GetElements()[1]);
-        acc0.SetFormat(Format::COEFFICIENT);
-        acc1.SetFormat(Format::COEFFICIENT);
-        std::vector<std::vector<Complex>> acc_d(2, std::vector<Complex>(N, Complex(0.0, 0.0)));
-        for (size_t i = 0; i < N; ++i) {
-            acc_d[0][i].real(static_cast<BasicFloat>(acc0[i].ConvertToInt()));
-            acc_d[1][i].real(static_cast<BasicFloat>(acc1[i].ConvertToInt()));
-        }
+        std::vector<NativeVector> a_vec = {a};
+        acc->SetFormat(Format::COEFFICIENT);
+        auto acc_vec = std::make_shared<std::vector<RLWECiphertext>> (1, acc);
 
         // Blind rotate
-        AddToAccCGGI_CUDA(params, a, acc_d, "SINGLE");
+        AddToAccCGGI_CUDA(params, a_vec, acc_vec, "SINGLE");
 
-        // cast acc_d to NativePoly
-        NativeVector ret0(N, Q), ret1(N, Q);
-        for (size_t i = 0; i < N; ++i) {
-            ret0[i] = static_cast<BasicInteger>(acc_d[0][i].real());
-            ret1[i] = static_cast<BasicInteger>(acc_d[1][i].real());
-        }
-        std::vector<NativePoly> res(2);
-        res[0] = NativePoly(polyParams, Format::COEFFICIENT, false);
-        res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
-        res[0].SetValues(std::move(ret0), Format::COEFFICIENT);
-        res[1].SetValues(std::move(ret1), Format::COEFFICIENT);
-        res[0].SetFormat(Format::EVALUATION);
-        res[1].SetFormat(Format::EVALUATION);
-        acc = std::make_shared<RLWECiphertextImpl>(std::move(res));
+        acc = (*acc_vec)[0];
     }
     else{
         std::string errMsg = "ERROR: Transform mode not supported.";

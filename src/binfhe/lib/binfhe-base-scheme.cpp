@@ -575,19 +575,19 @@ LWECiphertext BinFHEScheme::BootstrapFunc(const std::shared_ptr<BinFHECryptoPara
     // auto ctMS2 = LWEscheme->ModSwitch(fmod, ctKS);
 
     /************************test*************************/
-    // NativeVector& ct_NTT_A = ctKS->GetA();
+    // NativeVector& ct_NTT_A = ctMS2->GetA();
     // std::ofstream outputFile;
     // outputFile.open("ntt.txt", std::ios::out);
     // for(uint32_t i = 0; i < ct_NTT_A.GetLength(); i++)
     //     outputFile << ct_NTT_A[i] << std::endl;
-    // outputFile << ctMS->GetB().ConvertToInt() << std::endl;
+    // outputFile << ctMS2->GetB().ConvertToInt() << std::endl;
     // outputFile.close();
 
-    // NativeVector& ct_FFT_A = ctKS_FFT->GetA();
+    // NativeVector& ct_FFT_A = ctMS2_FFT->GetA();
     // outputFile.open("fft.txt", std::ios::out);
     // for(uint32_t i = 0; i < ct_FFT_A.GetLength(); i++)
     //     outputFile << ct_FFT_A[i] << std::endl;
-    // outputFile << ctMS_FFT->GetB().ConvertToInt() << std::endl;
+    // outputFile << ctMS2_FFT->GetB().ConvertToInt() << std::endl;
     // outputFile.close();
     /*****************************************************/
 

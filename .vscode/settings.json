@@ -81,7 +81,8 @@
         "semaphore": "cpp",
         "stop_token": "cpp",
         "valarray": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "__locale": "cpp"
     },
     "cmake.configureOnOpen": false
 }
