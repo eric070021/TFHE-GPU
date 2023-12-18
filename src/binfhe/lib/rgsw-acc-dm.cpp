@@ -78,7 +78,7 @@ RingGSWACCKey RingGSWAccumulatorDM::KeyGenAcc(const std::shared_ptr<RingGSWCrypt
 }
 
 void RingGSWAccumulatorDM::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek,
-                                   RLWECiphertext& acc, const NativeVector& a, std::string mode) const {
+                                   RLWECiphertext& acc, const NativeVector& a, std::string mode, uint64_t fmod) const {
     uint32_t baseR = params->GetBaseR();
     auto digitsR   = params->GetDigitsR();
     auto q         = params->Getq();

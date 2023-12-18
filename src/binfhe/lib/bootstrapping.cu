@@ -854,7 +854,6 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     /* Allocate memory and send to multiple GPUs */
     GPUVec.resize(GPU_num);
     for(int g = 0; g < GPU_num; g++){
-        /* Set device */
         cudaSetDevice(g);
         
         /* Configure cuFFTDx */
@@ -935,435 +934,355 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
 }
 
 void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
-        std::shared_ptr<std::vector<RLWECiphertext>> acc, std::string mode)
+        std::shared_ptr<std::vector<RLWECiphertext>> acc, uint64_t fmod)
 {   
+    std::string mode = "MULTI";
+
     /* Parameters Set */
     uint32_t N            = params->GetN();
     uint32_t NHalf     = N >> 1;
     uint32_t digitsG2 = params->GetDigitsG() << 1;
     uint32_t arch = gpuInfoList[0].major * 100 + gpuInfoList[0].minor * 10;
 
-    /* Determine template of AddToAccCGGI_CUDA_core */
-    switch (arch){
-        case 700: // V100
-            switch (NHalf){
-                case 512:
-                    switch (digitsG2){
-                        case 2:
-                            AddToAccCGGI_CUDA_core<700, 512, 2>(params, a, acc, mode);
-                            break;
-                        case 4:
-                            AddToAccCGGI_CUDA_core<700, 512, 4>(params, a, acc, mode);
-                            break;
-                        case 6:
-                            AddToAccCGGI_CUDA_core<700, 512, 6>(params, a, acc, mode);
-                            break;
-                        case 8:
-                            AddToAccCGGI_CUDA_core<700, 512, 8>(params, a, acc, mode);
-                            break;
-                        case 10:
-                            AddToAccCGGI_CUDA_core<700, 512, 10>(params, a, acc, mode);
-                            break;
-                        case 12:
-                            AddToAccCGGI_CUDA_core<700, 512, 12>(params, a, acc, mode);
-                            break;
-                        default:
-                            std::cerr << "Unsupported digitsG\n";
-                            exit(1);
-                    }
-                    break;
-                case 1024:
-                    switch (digitsG2){
-                        case 2:
-                            AddToAccCGGI_CUDA_core<700, 1024, 2>(params, a, acc, mode);
-                            break;
-                        case 4:
-                            AddToAccCGGI_CUDA_core<700, 1024, 4>(params, a, acc, mode);
-                            break;
-                        case 6:
-                            AddToAccCGGI_CUDA_core<700, 1024, 6>(params, a, acc, mode);
-                            break;
-                        case 8:
-                            AddToAccCGGI_CUDA_core<700, 1024, 8>(params, a, acc, mode);
-                            break;
-                        case 10:
-                            AddToAccCGGI_CUDA_core<700, 1024, 10>(params, a, acc, mode);
-                            break;
-                        case 12:
-                            AddToAccCGGI_CUDA_core<700, 1024, 12>(params, a, acc, mode);
-                            break;
-                        default:
-                            std::cerr << "Unsupported digitsG\n";
-                            exit(1);
-                    }
-                    break;
-                case 2048:
-                    switch (digitsG2){
-                        case 2:
-                            AddToAccCGGI_CUDA_core<700, 2048, 2>(params, a, acc, mode);
-                            break;
-                        case 4:
-                            AddToAccCGGI_CUDA_core<700, 2048, 4>(params, a, acc, mode);
-                            break;
-                        case 6:
-                            AddToAccCGGI_CUDA_core<700, 2048, 6>(params, a, acc, mode);
-                            break;
-                        case 8:
-                            AddToAccCGGI_CUDA_core<700, 2048, 8>(params, a, acc, mode);
-                            break;
-                        case 10:
-                            AddToAccCGGI_CUDA_core<700, 2048, 10>(params, a, acc, mode);
-                            break;
-                        case 12:
-                            AddToAccCGGI_CUDA_core<700, 2048, 12>(params, a, acc, mode);
-                            break;
-                        default:
-                            std::cerr << "Unsupported digitsG\n";
-                            exit(1);
-                    }
-                    break;
-                default:
-                    std::cerr << "Unsupported N\n";
-                    exit(1);
-            }
-            break;
-        case 800: // A100
-            switch (NHalf){
-                case 512:
-                    switch (digitsG2){
-                        case 2:
-                            AddToAccCGGI_CUDA_core<800, 512, 2>(params, a, acc, mode);
-                            break;
-                        case 4:
-                            AddToAccCGGI_CUDA_core<800, 512, 4>(params, a, acc, mode);
-                            break;
-                        case 6:
-                            AddToAccCGGI_CUDA_core<800, 512, 6>(params, a, acc, mode);
-                            break;
-                        case 8:
-                            AddToAccCGGI_CUDA_core<800, 512, 8>(params, a, acc, mode);
-                            break;
-                        case 10:
-                            AddToAccCGGI_CUDA_core<800, 512, 10>(params, a, acc, mode);
-                            break;
-                        case 12:
-                            AddToAccCGGI_CUDA_core<800, 512, 12>(params, a, acc, mode);
-                            break;
-                        default:
-                            std::cerr << "Unsupported digitsG\n";
-                            exit(1);
-                    }
-                    break;
-                case 1024:
-                    switch (digitsG2){
-                        case 2:
-                            AddToAccCGGI_CUDA_core<800, 1024, 2>(params, a, acc, mode);
-                            break;
-                        case 4:
-                            AddToAccCGGI_CUDA_core<800, 1024, 4>(params, a, acc, mode);
-                            break;
-                        case 6:
-                            AddToAccCGGI_CUDA_core<800, 1024, 6>(params, a, acc, mode);
-                            break;
-                        case 8:
-                            AddToAccCGGI_CUDA_core<800, 1024, 8>(params, a, acc, mode);
-                            break;
-                        case 10:
-                            AddToAccCGGI_CUDA_core<800, 1024, 10>(params, a, acc, mode);
-                            break;
-                        case 12:
-                            AddToAccCGGI_CUDA_core<800, 1024, 12>(params, a, acc, mode);
-                            break;
-                        default:
-                            std::cerr << "Unsupported digitsG\n";
-                            exit(1);
-                    }
-                    break;
-                case 2048:
-                    switch (digitsG2){
-                        case 2:
-                            AddToAccCGGI_CUDA_core<800, 2048, 2>(params, a, acc, mode);
-                            break;
-                        case 4:
-                            AddToAccCGGI_CUDA_core<800, 2048, 4>(params, a, acc, mode);
-                            break;
-                        case 6:
-                            AddToAccCGGI_CUDA_core<800, 2048, 6>(params, a, acc, mode);
-                            break;
-                        case 8:
-                            AddToAccCGGI_CUDA_core<800, 2048, 8>(params, a, acc, mode);
-                            break;
-                        case 10:
-                            AddToAccCGGI_CUDA_core<800, 2048, 10>(params, a, acc, mode);
-                            break;
-                        case 12:
-                            AddToAccCGGI_CUDA_core<800, 2048, 12>(params, a, acc, mode);
-                            break;
-                        default:
-                            std::cerr << "Unsupported digitsG\n";
-                            exit(1);
-                    }
-                    break;
-                default:
-                    std::cerr << "Unsupported N\n";
-                    exit(1);
-            }
-            break;
-        case 860: // RTX30 series
-            switch (NHalf){
-                case 512:
-                    switch (digitsG2){
-                        case 2:
-                            AddToAccCGGI_CUDA_core<860, 512, 2>(params, a, acc, mode);
-                            break;
-                        case 4:
-                            AddToAccCGGI_CUDA_core<860, 512, 4>(params, a, acc, mode);
-                            break;
-                        case 6:
-                            AddToAccCGGI_CUDA_core<860, 512, 6>(params, a, acc, mode);
-                            break;
-                        case 8:
-                            AddToAccCGGI_CUDA_core<860, 512, 8>(params, a, acc, mode);
-                            break;
-                        case 10:
-                            AddToAccCGGI_CUDA_core<860, 512, 10>(params, a, acc, mode);
-                            break;
-                        case 12:
-                            AddToAccCGGI_CUDA_core<860, 512, 12>(params, a, acc, mode);
-                            break;
-                        default:
-                            std::cerr << "Unsupported digitsG\n";
-                            exit(1);
-                    }
-                    break;
-                case 1024:
-                    switch (digitsG2){
-                        case 2:
-                            AddToAccCGGI_CUDA_core<860, 1024, 2>(params, a, acc, mode);
-                            break;
-                        case 4:
-                            AddToAccCGGI_CUDA_core<860, 1024, 4>(params, a, acc, mode);
-                            break;
-                        case 6:
-                            AddToAccCGGI_CUDA_core<860, 1024, 6>(params, a, acc, mode);
-                            break;
-                        case 8:
-                            AddToAccCGGI_CUDA_core<860, 1024, 8>(params, a, acc, mode);
-                            break;
-                        case 10:
-                            AddToAccCGGI_CUDA_core<860, 1024, 10>(params, a, acc, mode);
-                            break;
-                        case 12:
-                            AddToAccCGGI_CUDA_core<860, 1024, 12>(params, a, acc, mode);
-                            break;
-                        default:
-                            std::cerr << "Unsupported digitsG\n";
-                            exit(1);
-                    }
-                    break;
-                case 2048:
-                    switch (digitsG2){
-                        case 2:
-                            AddToAccCGGI_CUDA_core<860, 2048, 2>(params, a, acc, mode);
-                            break;
-                        case 4:
-                            AddToAccCGGI_CUDA_core<860, 2048, 4>(params, a, acc, mode);
-                            break;
-                        case 6:
-                            AddToAccCGGI_CUDA_core<860, 2048, 6>(params, a, acc, mode);
-                            break;
-                        case 8:
-                            AddToAccCGGI_CUDA_core<860, 2048, 8>(params, a, acc, mode);
-                            break;
-                        case 10:
-                            AddToAccCGGI_CUDA_core<860, 2048, 10>(params, a, acc, mode);
-                            break;
-                        case 12:
-                            AddToAccCGGI_CUDA_core<860, 2048, 12>(params, a, acc, mode);
-                            break;
-                        default:
-                            std::cerr << "Unsupported digitsG\n";
-                            exit(1);
-                    }
-                    break;
-                default:
-                    std::cerr << "Unsupported N\n";
-                    exit(1);
-            }
-            break;
-        case 890: // RTX40 series
-            switch (NHalf){
-                case 512:
-                    switch (digitsG2){
-                        case 2:
-                            AddToAccCGGI_CUDA_core<890, 512, 2>(params, a, acc, mode);
-                            break;
-                        case 4:
-                            AddToAccCGGI_CUDA_core<890, 512, 4>(params, a, acc, mode);
-                            break;
-                        case 6:
-                            AddToAccCGGI_CUDA_core<890, 512, 6>(params, a, acc, mode);
-                            break;
-                        case 8:
-                            AddToAccCGGI_CUDA_core<890, 512, 8>(params, a, acc, mode);
-                            break;
-                        case 10:
-                            AddToAccCGGI_CUDA_core<890, 512, 10>(params, a, acc, mode);
-                            break;
-                        case 12:
-                            AddToAccCGGI_CUDA_core<890, 512, 12>(params, a, acc, mode);
-                            break;
-                        default:
-                            std::cerr << "Unsupported digitsG\n";
-                            exit(1);
-                    }
-                    break;
-                case 1024:
-                    switch (digitsG2){
-                        case 2:
-                            AddToAccCGGI_CUDA_core<890, 1024, 2>(params, a, acc, mode);
-                            break;
-                        case 4:
-                            AddToAccCGGI_CUDA_core<890, 1024, 4>(params, a, acc, mode);
-                            break;
-                        case 6:
-                            AddToAccCGGI_CUDA_core<890, 1024, 6>(params, a, acc, mode);
-                            break;
-                        case 8:
-                            AddToAccCGGI_CUDA_core<890, 1024, 8>(params, a, acc, mode);
-                            break;
-                        case 10:
-                            AddToAccCGGI_CUDA_core<890, 1024, 10>(params, a, acc, mode);
-                            break;
-                        case 12:
-                            AddToAccCGGI_CUDA_core<890, 1024, 12>(params, a, acc, mode);
-                            break;
-                        default:
-                            std::cerr << "Unsupported digitsG\n";
-                            exit(1);
-                    }
-                    break;
-                case 2048:
-                    switch (digitsG2){
-                        case 2:
-                            AddToAccCGGI_CUDA_core<890, 2048, 2>(params, a, acc, mode);
-                            break;
-                        case 4:
-                            AddToAccCGGI_CUDA_core<890, 2048, 4>(params, a, acc, mode);
-                            break;
-                        case 6:
-                            AddToAccCGGI_CUDA_core<890, 2048, 6>(params, a, acc, mode);
-                            break;
-                        case 8:
-                            AddToAccCGGI_CUDA_core<890, 2048, 8>(params, a, acc, mode);
-                            break;
-                        case 10:
-                            AddToAccCGGI_CUDA_core<890, 2048, 10>(params, a, acc, mode);
-                            break;
-                        case 12:
-                            AddToAccCGGI_CUDA_core<890, 2048, 12>(params, a, acc, mode);
-                            break;
-                        default:
-                            std::cerr << "Unsupported digitsG\n";
-                            exit(1);
-                    }
-                    break;
-                default:
-                    std::cerr << "Unsupported N\n";
-                    exit(1);
-            }
-            break;
-        case 900: // H100
-            switch (NHalf){
-                case 512:
-                    switch (digitsG2){
-                        case 2:
-                            AddToAccCGGI_CUDA_core<900, 512, 2>(params, a, acc, mode);
-                            break;
-                        case 4:
-                            AddToAccCGGI_CUDA_core<900, 512, 4>(params, a, acc, mode);
-                            break;
-                        case 6:
-                            AddToAccCGGI_CUDA_core<900, 512, 6>(params, a, acc, mode);
-                            break;
-                        case 8:
-                            AddToAccCGGI_CUDA_core<900, 512, 8>(params, a, acc, mode);
-                            break;
-                        case 10:
-                            AddToAccCGGI_CUDA_core<900, 512, 10>(params, a, acc, mode);
-                            break;
-                        case 12:
-                            AddToAccCGGI_CUDA_core<900, 512, 12>(params, a, acc, mode);
-                            break;
-                        default:
-                            std::cerr << "Unsupported digitsG\n";
-                            exit(1);
-                    }
-                    break;
-                case 1024:
-                    switch (digitsG2){
-                        case 2:
-                            AddToAccCGGI_CUDA_core<900, 1024, 2>(params, a, acc, mode);
-                            break;
-                        case 4:
-                            AddToAccCGGI_CUDA_core<900, 1024, 4>(params, a, acc, mode);
-                            break;
-                        case 6:
-                            AddToAccCGGI_CUDA_core<900, 1024, 6>(params, a, acc, mode);
-                            break;
-                        case 8:
-                            AddToAccCGGI_CUDA_core<900, 1024, 8>(params, a, acc, mode);
-                            break;
-                        case 10:
-                            AddToAccCGGI_CUDA_core<900, 1024, 10>(params, a, acc, mode);
-                            break;
-                        case 12:
-                            AddToAccCGGI_CUDA_core<900, 1024, 12>(params, a, acc, mode);
-                            break;
-                        default:
-                            std::cerr << "Unsupported digitsG\n";
-                            exit(1);
-                    }
-                    break;
-                case 2048:
-                    switch (digitsG2){
-                        case 2:
-                            AddToAccCGGI_CUDA_core<900, 2048, 2>(params, a, acc, mode);
-                            break;
-                        case 4:
-                            AddToAccCGGI_CUDA_core<900, 2048, 4>(params, a, acc, mode);
-                            break;
-                        case 6:
-                            AddToAccCGGI_CUDA_core<900, 2048, 6>(params, a, acc, mode);
-                            break;
-                        case 8:
-                            AddToAccCGGI_CUDA_core<900, 2048, 8>(params, a, acc, mode);
-                            break;
-                        case 10:
-                            AddToAccCGGI_CUDA_core<900, 2048, 10>(params, a, acc, mode);
-                            break;
-                        case 12:
-                            AddToAccCGGI_CUDA_core<900, 2048, 12>(params, a, acc, mode);
-                            break;
-                        default:
-                            std::cerr << "Unsupported digitsG\n";
-                            exit(1);
-                    }
-                    break;
-                default:
-                    std::cerr << "Unsupported N\n";
-                    exit(1);
-            }
-            break;
-        default:
-            std::cerr << "Unsupported GPU architecture\n";
-            exit(1);
+    if(mode == "SINGLE"){
+        switch (arch){
+            case 700: // V100
+                switch (NHalf){
+                    case 512:
+                        switch (digitsG2){
+                            case 2:
+                                AddToAccCGGI_CUDA_single<700, 512, 2>(params, a, acc, fmod);
+                                break;
+                            case 4:
+                                AddToAccCGGI_CUDA_single<700, 512, 4>(params, a, acc, fmod);
+                                break;
+                            case 6:
+                                AddToAccCGGI_CUDA_single<700, 512, 6>(params, a, acc, fmod);
+                                break;
+                            case 8:
+                                AddToAccCGGI_CUDA_single<700, 512, 8>(params, a, acc, fmod);
+                                break;
+                            default:
+                                std::cerr << "Unsupported digitsG in Single block mode\n";
+                                exit(1);
+                        }
+                        break;
+                    case 1024:
+                        switch (digitsG2){
+                            case 2:
+                                AddToAccCGGI_CUDA_single<700, 1024, 2>(params, a, acc, fmod);
+                                break;
+                            case 4:
+                                AddToAccCGGI_CUDA_single<700, 1024, 4>(params, a, acc, fmod);
+                                break;
+                            case 6:
+                                AddToAccCGGI_CUDA_single<700, 1024, 6>(params, a, acc, fmod);
+                                break;
+                            case 8:
+                                AddToAccCGGI_CUDA_single<700, 1024, 8>(params, a, acc, fmod);
+                                break;
+                            default:
+                                std::cerr << "Unsupported digitsG in Single block mode\n";
+                                exit(1);
+                        }
+                        break;
+                    default:
+                        std::cerr << "Unsupported N in Single block mode\n";
+                        exit(1);
+                }
+                break;
+            case 800: // A100
+                switch (NHalf){
+                    case 512:
+                        switch (digitsG2){
+                            case 2:
+                                AddToAccCGGI_CUDA_single<800, 512, 2>(params, a, acc, fmod);
+                                break;
+                            case 4:
+                                AddToAccCGGI_CUDA_single<800, 512, 4>(params, a, acc, fmod);
+                                break;
+                            case 6:
+                                AddToAccCGGI_CUDA_single<800, 512, 6>(params, a, acc, fmod);
+                                break;
+                            case 8:
+                                AddToAccCGGI_CUDA_single<800, 512, 8>(params, a, acc, fmod);
+                                break;
+                            default:
+                                std::cerr << "Unsupported digitsG in Single block mode\n";
+                                exit(1);
+                        }
+                        break;
+                    case 1024:
+                        switch (digitsG2){
+                            case 2:
+                                AddToAccCGGI_CUDA_single<800, 1024, 2>(params, a, acc, fmod);
+                                break;
+                            case 4:
+                                AddToAccCGGI_CUDA_single<800, 1024, 4>(params, a, acc, fmod);
+                                break;
+                            case 6:
+                                AddToAccCGGI_CUDA_single<800, 1024, 6>(params, a, acc, fmod);
+                                break;
+                            case 8:
+                                AddToAccCGGI_CUDA_single<800, 1024, 8>(params, a, acc, fmod);
+                                break;
+                            default:
+                                std::cerr << "Unsupported digitsG in Single block mode\n";
+                                exit(1);
+                        }
+                        break;
+                    default:
+                        std::cerr << "Unsupported N in Single block mode\n";
+                        exit(1);
+                }
+                break;
+            case 860: // RTX30 series
+                switch (NHalf){
+                    case 512:
+                        switch (digitsG2){
+                            case 2:
+                                AddToAccCGGI_CUDA_single<860, 512, 2>(params, a, acc, fmod);
+                                break;
+                            case 4:
+                                AddToAccCGGI_CUDA_single<860, 512, 4>(params, a, acc, fmod);
+                                break;
+                            case 6:
+                                AddToAccCGGI_CUDA_single<860, 512, 6>(params, a, acc, fmod);
+                                break;
+                            case 8:
+                                AddToAccCGGI_CUDA_single<860, 512, 8>(params, a, acc, fmod);
+                                break;
+                            default:
+                                std::cerr << "Unsupported digitsG in Single block mode\n";
+                                exit(1);
+                        }
+                        break;
+                    case 1024:
+                        switch (digitsG2){
+                            case 2:
+                                AddToAccCGGI_CUDA_single<860, 1024, 2>(params, a, acc, fmod);
+                                break;
+                            case 4:
+                                AddToAccCGGI_CUDA_single<860, 1024, 4>(params, a, acc, fmod);
+                                break;
+                            case 6:
+                                AddToAccCGGI_CUDA_single<860, 1024, 6>(params, a, acc, fmod);
+                                break;
+                            case 8:
+                                AddToAccCGGI_CUDA_single<860, 1024, 8>(params, a, acc, fmod);
+                                break;
+                            default:
+                                std::cerr << "Unsupported digitsG in Single block mode\n";
+                                exit(1);
+                        }
+                        break;
+                    default:
+                        std::cerr << "Unsupported N in Single block mode\n";
+                        exit(1);
+                }
+                break;
+            case 890: // RTX40 series
+                switch (NHalf){
+                    case 512:
+                        switch (digitsG2){
+                            case 2:
+                                AddToAccCGGI_CUDA_single<890, 512, 2>(params, a, acc, fmod);
+                                break;
+                            case 4:
+                                AddToAccCGGI_CUDA_single<890, 512, 4>(params, a, acc, fmod);
+                                break;
+                            case 6:
+                                AddToAccCGGI_CUDA_single<890, 512, 6>(params, a, acc, fmod);
+                                break;
+                            case 8:
+                                AddToAccCGGI_CUDA_single<890, 512, 8>(params, a, acc, fmod);
+                                break;
+                            default:
+                                std::cerr << "Unsupported digitsG in Single block mode\n";
+                                exit(1);
+                        }
+                        break;
+                    case 1024:
+                        switch (digitsG2){
+                            case 2:
+                                AddToAccCGGI_CUDA_single<890, 1024, 2>(params, a, acc, fmod);
+                                break;
+                            case 4:
+                                AddToAccCGGI_CUDA_single<890, 1024, 4>(params, a, acc, fmod);
+                                break;
+                            case 6:
+                                AddToAccCGGI_CUDA_single<890, 1024, 6>(params, a, acc, fmod);
+                                break;
+                            case 8:
+                                AddToAccCGGI_CUDA_single<890, 1024, 8>(params, a, acc, fmod);
+                                break;
+                            default:
+                                std::cerr << "Unsupported digitsG in Single block mode\n";
+                                exit(1);
+                        }
+                        break;
+                    default:
+                        std::cerr << "Unsupported N in Single block mode\n";
+                        exit(1);
+                }
+                break;
+            case 900: // H100
+                switch (NHalf){
+                    case 512:
+                        switch (digitsG2){
+                            case 2:
+                                AddToAccCGGI_CUDA_single<900, 512, 2>(params, a, acc, fmod);
+                                break;
+                            case 4:
+                                AddToAccCGGI_CUDA_single<900, 512, 4>(params, a, acc, fmod);
+                                break;
+                            case 6:
+                                AddToAccCGGI_CUDA_single<900, 512, 6>(params, a, acc, fmod);
+                                break;
+                            case 8:
+                                AddToAccCGGI_CUDA_single<900, 512, 8>(params, a, acc, fmod);
+                                break;
+                            default:
+                                std::cerr << "Unsupported digitsG in Single block mode\n";
+                                exit(1);
+                        }
+                        break;
+                    case 1024:
+                        switch (digitsG2){
+                            case 2:
+                                AddToAccCGGI_CUDA_single<900, 1024, 2>(params, a, acc, fmod);
+                                break;
+                            case 4:
+                                AddToAccCGGI_CUDA_single<900, 1024, 4>(params, a, acc, fmod);
+                                break;
+                            case 6:
+                                AddToAccCGGI_CUDA_single<900, 1024, 6>(params, a, acc, fmod);
+                                break;
+                            case 8:
+                                AddToAccCGGI_CUDA_single<900, 1024, 8>(params, a, acc, fmod);
+                                break;
+                            default:
+                                std::cerr << "Unsupported digitsG in Single block mode\n";
+                                exit(1);
+                        }
+                        break;
+                    default:
+                        std::cerr << "Unsupported N in Single block mode\n";
+                        exit(1);
+                }
+                break;
+            default:
+                std::cerr << "Unsupported GPU architecture\n";
+                exit(1);
+        }
+    }
+    else if(mode == "MULTI"){
+        switch (arch){
+            case 700: // V100
+                switch (NHalf){
+                    case 512:
+                        AddToAccCGGI_CUDA_multi<700, 512>(params, a, acc, fmod);
+                        break;
+                    case 1024:
+                        AddToAccCGGI_CUDA_multi<700, 1024>(params, a, acc, fmod);
+                        break;
+                    case 2048:
+                        AddToAccCGGI_CUDA_multi<700, 2048>(params, a, acc, fmod);
+                        break;
+                    case 4096:
+                        AddToAccCGGI_CUDA_multi<700, 4096>(params, a, acc, fmod);
+                        break;
+                    default:
+                        std::cerr << "Unsupported N, we support N = 1024, 2048, 4096, 8192\n";
+                        exit(1);
+                }
+                break;
+            case 800: // A100
+                switch (NHalf){
+                    case 512:
+                        AddToAccCGGI_CUDA_multi<800, 512>(params, a, acc, fmod);
+                        break;
+                    case 1024:
+                        AddToAccCGGI_CUDA_multi<800, 1024>(params, a, acc, fmod);
+                        break;
+                    case 2048:
+                        AddToAccCGGI_CUDA_multi<800, 2048>(params, a, acc, fmod);
+                        break;
+                    case 4096:
+                        AddToAccCGGI_CUDA_multi<800, 4096>(params, a, acc, fmod);
+                        break;
+                    default:
+                        std::cerr << "Unsupported N, we support N = 1024, 2048, 4096, 8192\n";
+                        exit(1);
+                }
+                break;
+            case 860: // RTX30 series
+                switch (NHalf){
+                    case 512:
+                        AddToAccCGGI_CUDA_multi<860, 512>(params, a, acc, fmod);
+                        break;
+                    case 1024:
+                        AddToAccCGGI_CUDA_multi<860, 1024>(params, a, acc, fmod);
+                        break;
+                    case 2048:
+                        AddToAccCGGI_CUDA_multi<860, 2048>(params, a, acc, fmod);
+                        break;
+                    case 4096:
+                        AddToAccCGGI_CUDA_multi<860, 4096>(params, a, acc, fmod);
+                        break;
+                    default:
+                        std::cerr << "Unsupported N, we support N = 1024, 2048, 4096, 8192\n";
+                        exit(1);
+                }
+                break;
+            case 890: // RTX40 series
+                switch (NHalf){
+                    case 512:
+                        AddToAccCGGI_CUDA_multi<890, 512>(params, a, acc, fmod);
+                        break;
+                    case 1024:
+                        AddToAccCGGI_CUDA_multi<890, 1024>(params, a, acc, fmod);
+                        break;
+                    case 2048:
+                        AddToAccCGGI_CUDA_multi<890, 2048>(params, a, acc, fmod);
+                        break;
+                    case 4096:
+                        AddToAccCGGI_CUDA_multi<890, 4096>(params, a, acc, fmod);
+                        break;
+                    default:
+                        std::cerr << "Unsupported N, we support N = 1024, 2048, 4096, 8192\n";
+                        exit(1);
+                }
+                break;
+            case 900: // H100
+                switch (NHalf){
+                    case 512:
+                        AddToAccCGGI_CUDA_multi<900, 512>(params, a, acc, fmod);
+                        break;
+                    case 1024:
+                        AddToAccCGGI_CUDA_multi<900, 1024>(params, a, acc, fmod);
+                        break;
+                    case 2048:
+                        AddToAccCGGI_CUDA_multi<900, 2048>(params, a, acc, fmod);
+                        break;
+                    case 4096:
+                        AddToAccCGGI_CUDA_multi<900, 4096>(params, a, acc, fmod);
+                        break;
+                    default:
+                        std::cerr << "Unsupported N, we support N = 1024, 2048, 4096, 8192\n";
+                        exit(1);
+                }
+                break;
+            default:
+                std::cerr << "Unsupported GPU architecture, we support compute capability = 700, 800, 860, 890, 900\n";
+                exit(1);
+        }
     }
 }
 
 template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
-void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
-        std::shared_ptr<std::vector<RLWECiphertext>> acc, std::string mode)
+void AddToAccCGGI_CUDA_single(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
+        std::shared_ptr<std::vector<RLWECiphertext>> acc, uint64_t fmod)
 {   
     /* HE parameters set */
     auto mod                = a[0].GetModulus();
@@ -1378,56 +1297,36 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     uint32_t digitsG2       = params->GetDigitsG() << 1;
     auto polyParams         = params->GetPolyParams();
 
+    /* GPU settings */
     int bootstrap_num       = acc->size();
     int GPU_num             = gpuInfoList.size();
     int SM_count            = gpuInfoList[0].multiprocessorCount;
 
     /* Configure cuFFTDx */
-    using FFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() + cufftdx::ElementsPerThread<8>() +
-                        cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<FFT_num>() + cufftdx::SM<arch>());
+    using FFT    = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() + 
+                            cufftdx::ElementsPerThread<8>() + cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<FFT_num>() + cufftdx::SM<arch>());
 
-    using IFFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() + cufftdx::ElementsPerThread<8>() +
-                            cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
+    using IFFT   = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() + 
+                            cufftdx::ElementsPerThread<8>() + cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
 
-    using FFT_multi      = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() +
-                            cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
 
-    using IFFT_multi     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() +
-                            cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
-
+    /* Increase max shared memory */
+    auto sharedMem = sharedMemMap.find(arch);
+    int maxSharedMemoryAvail = sharedMem->second * 1024;
     for(int g = 0; g < GPU_num; g++){
-        /* Set device */
         cudaSetDevice(g);
-
-        /* Increase max shared memory */
-        auto it = sharedMemMap.find(arch);
-        int maxSharedMemoryAvail = it->second * 1024;
         // Single block Bootstrapping shared memory size
         if(FFT::shared_memory_size < maxSharedMemoryAvail){
             CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size));
         }
-        // Multi block Bootstrapping shared memory size
-        if(FFT_multi::shared_memory_size < maxSharedMemoryAvail){
-            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_multi::shared_memory_size));
-        }
     }
 
     /* Check whether block size exceeds cuda limitation */
-    if(mode == "SINGLE"){
-        if((NHalf / FFT::elements_per_thread * digitsG2) > gpuInfoList[0].maxThreadsPerBlock){
-            std::cerr << "Exceed Maximum blocks per threads (" << gpuInfoList[0].maxThreadsPerBlock << ")\n";
-            std::cerr << "Using " << (NHalf / FFT::elements_per_thread * digitsG2) << " threads" << ")\n";
-            std::cerr << "NHalf: " << NHalf << "FFT::elements_per_thread: " << FFT::elements_per_thread << "digitsG2: " << digitsG2 << ")\n";
-            exit(1);
-        }
-    }
-    else if(mode == "MULTI"){
-        if((NHalf / FFT_multi::elements_per_thread * 2) > gpuInfoList[0].maxThreadsPerBlock){
-            std::cerr << "Exceed Maximum blocks per threads (" << gpuInfoList[0].maxThreadsPerBlock << ")\n";
-            std::cerr << "Using " << (NHalf / FFT_multi::elements_per_thread * digitsG2) << " threads" << ")\n";
-            std::cerr << "NHalf: " << NHalf << "FFT::elements_per_thread: " << FFT_multi::elements_per_thread << ")\n";
-            exit(1);
-        }
+    if((NHalf / FFT::elements_per_thread * digitsG2) > gpuInfoList[0].maxThreadsPerBlock){
+        std::cerr << "Exceed Maximum blocks per threads (" << gpuInfoList[0].maxThreadsPerBlock << ")\n";
+        std::cerr << "Using " << (NHalf / FFT::elements_per_thread * digitsG2) << " threads" << ")\n";
+        std::cerr << "NHalf: " << NHalf << "FFT::elements_per_thread: " << FFT::elements_per_thread << "digitsG2: " << digitsG2 << ")\n";
+        exit(1);
     }
 
     /* Initialize a_arr */
@@ -1451,48 +1350,26 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    if(mode == "SINGLE"){
-        uint32_t syncNum;
-        auto it = synchronizationMap.find({arch, FFT_dimension});
-        if (it != synchronizationMap.end() && it->second != 0) {
-            syncNum = it->second;
-        } else {
-            std::cerr << "Hasn't tested on this GPU or N yet, please contact r11922138@ntu.edu.tw" << std::endl;
-            exit(1);
-        }
-        for (int s = 0; s < bootstrap_num; s++) {
-            int currentGPU = (s / SM_count) % GPU_num;
-            if(s % SM_count == 0){
-                cudaSetDevice(currentGPU);
-            }
-            cudaMemcpyAsync(GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
-            cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
-            bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size, GPUVec[currentGPU].streams[s % SM_count]>>>
-                (GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].ct_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].dct_CUDA + (s % SM_count)*digitsG2*NHalf,
-                    GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, GPUVec[currentGPU].monomial_CUDA, GPUVec[currentGPU].twiddleTable_CUDA, GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, GPUVec[currentGPU].params_CUDA, syncNum);
-            cudaMemcpyAsync(acc_d_arr + s*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
-        }
+    /* Main Bootstrapping */
+    uint32_t syncNum;
+    auto it = synchronizationMap.find({arch, FFT_dimension});
+    if (it != synchronizationMap.end() && it->second != 0) {
+        syncNum = it->second;
+    } else {
+        std::cerr << "Hasn't tested on this GPU or N yet, please contact r11922138@ntu.edu.tw" << std::endl;
+        exit(1);
     }
-    else if(mode == "MULTI"){
-        Complex_d* acc_CUDA_offset, *ct_CUDA_offset, *dct_CUDA_offset;
-        uint64_t* a_CUDA_offset;
-        for (int s = 0; s < bootstrap_num; s++) {
-            int currentGPU = (s / SM_count) % GPU_num;
-            if(s % SM_count == 0){
-                cudaSetDevice(currentGPU);
-            }
-            acc_CUDA_offset = GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf;
-            ct_CUDA_offset = GPUVec[currentGPU].ct_CUDA + (s % SM_count)*2*NHalf;
-            dct_CUDA_offset = GPUVec[currentGPU].dct_CUDA + (s % SM_count)*digitsG2*NHalf;
-            a_CUDA_offset = GPUVec[currentGPU].a_CUDA + (s % SM_count)*n;
-            cudaMemcpyAsync(GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
-            cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
-            void *kernelArgs[] = {(void *)&acc_CUDA_offset, (void *)&ct_CUDA_offset, (void *)&dct_CUDA_offset, (void *)&a_CUDA_offset, 
-                (void *)&GPUVec[currentGPU].monomial_CUDA, (void *)&GPUVec[currentGPU].twiddleTable_CUDA, (void *)&GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, (void *)&GPUVec[currentGPU].params_CUDA};
-            cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT_multi, IFFT_multi>), digitsG2/2, FFT_multi::block_dim, 
-                kernelArgs, FFT_multi::shared_memory_size, GPUVec[currentGPU].streams[s % SM_count]);
-            cudaMemcpyAsync(acc_d_arr + s*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
+    for (int s = 0; s < bootstrap_num; s++) {
+        int currentGPU = (s / SM_count) % GPU_num;
+        if(s % SM_count == 0){
+            cudaSetDevice(currentGPU);
         }
+        cudaMemcpyAsync(GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+        cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+        bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size, GPUVec[currentGPU].streams[s % SM_count]>>>
+            (GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].ct_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].dct_CUDA + (s % SM_count)*digitsG2*NHalf,
+                GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, GPUVec[currentGPU].monomial_CUDA, GPUVec[currentGPU].twiddleTable_CUDA, GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, GPUVec[currentGPU].params_CUDA, syncNum);
+        cudaMemcpyAsync(acc_d_arr + s*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
     }
 
     /* Synchronize all GPUs */
@@ -1501,6 +1378,7 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
         CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
         CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
     }
+
     auto end = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
     std::cout << bootstrap_num << "AddToAccCGGI_CUDA_core GPU time : " << elapsed.count() << " ms" << std::endl;
@@ -1527,6 +1405,297 @@ void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, c
     cudaFreeHost(a_arr);
     cudaFreeHost(acc_d_arr);
 }
+
+template<uint32_t arch, uint32_t FFT_dimension>
+void AddToAccCGGI_CUDA_multi(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
+        std::shared_ptr<std::vector<RLWECiphertext>> acc, uint64_t fmod)
+{   
+    /* HE parameters set */
+    auto mod                = a[0].GetModulus();
+    uint32_t modInt         = mod.ConvertToInt();
+    auto Q                  = params->GetQ();
+    NativeInteger QHalf     = Q >> 1;
+    int64_t Q_int           = Q.ConvertToInt();
+    uint32_t N              = params->GetN();
+    uint32_t NHalf          = N >> 1;
+    uint32_t n              =  a[0].GetLength();
+    uint32_t M              = 2 * params->GetN();
+    uint32_t digitsG2       = params->GetDigitsG() << 1;
+    auto polyParams         = params->GetPolyParams();
+
+    /* GPU settings */
+    int bootstrap_num       = acc->size();
+    int GPU_num             = gpuInfoList.size();
+    int SM_count            = gpuInfoList[0].multiprocessorCount;
+
+    /* Configure cuFFTDx */
+    using FFT      = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() +
+                            cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
+
+    using IFFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() +
+                            cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
+
+    /* Increase max shared memory */
+    auto sharedMem = sharedMemMap.find(arch);
+    int maxSharedMemoryAvail = sharedMem->second * 1024;
+    for(int g = 0; g < GPU_num; g++){
+        cudaSetDevice(g);
+        // Multi block Bootstrapping shared memory size
+        if(FFT::shared_memory_size < maxSharedMemoryAvail){
+            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size));
+        }
+    }
+
+    /* Check whether block size exceeds cuda limitation */
+    if((NHalf / FFT::elements_per_thread * 2) > gpuInfoList[0].maxThreadsPerBlock){
+        std::cerr << "Exceed Maximum blocks per threads (" << gpuInfoList[0].maxThreadsPerBlock << ")\n";
+        std::cerr << "Using " << (NHalf / FFT::elements_per_thread * digitsG2) << " threads" << ")\n";
+        std::cerr << "NHalf: " << NHalf << "FFT::elements_per_thread: " << FFT::elements_per_thread << ")\n";
+        exit(1);
+    }
+
+    /* Initialize a_arr */
+    uint64_t* a_arr;
+    cudaMallocHost((void**)&a_arr, bootstrap_num * n * sizeof(uint64_t));
+    for (int s = 0; s < bootstrap_num; s++)
+        for (size_t i = 0; i < n; ++i)
+            a_arr[s*n + i] = (mod.ModSub(a[s][i], mod) * (M / modInt)).ConvertToInt();
+
+    /* Initialize acc_d_arr */
+    Complex* acc_d_arr;
+    cudaMallocHost((void**)&acc_d_arr, bootstrap_num * 2 * NHalf * sizeof(Complex));
+    for (int s = 0; s < bootstrap_num; s++){
+        for(int i = 0; i < 2; i++){
+            NativePoly& acc_t((*acc)[s]->GetElements()[i]);
+            for(int j = 0; j < NHalf; j++){
+                acc_d_arr[s*2*NHalf + i*NHalf + j] = Complex(static_cast<double>(acc_t[j].ConvertToInt()), static_cast<double>(acc_t[j + NHalf].ConvertToInt()));
+            }
+        }
+    }
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    /* Main Bootstrapping */
+    Complex_d* acc_CUDA_offset, *ct_CUDA_offset, *dct_CUDA_offset;
+    uint64_t* a_CUDA_offset;
+    for (int s = 0; s < bootstrap_num; s++) {
+        int currentGPU = (s / SM_count) % GPU_num;
+        if(s % SM_count == 0){
+            cudaSetDevice(currentGPU);
+        }
+        acc_CUDA_offset = GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf;
+        ct_CUDA_offset = GPUVec[currentGPU].ct_CUDA + (s % SM_count)*2*NHalf;
+        dct_CUDA_offset = GPUVec[currentGPU].dct_CUDA + (s % SM_count)*digitsG2*NHalf;
+        a_CUDA_offset = GPUVec[currentGPU].a_CUDA + (s % SM_count)*n;
+        cudaMemcpyAsync(GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+        cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+        void *kernelArgs[] = {(void *)&acc_CUDA_offset, (void *)&ct_CUDA_offset, (void *)&dct_CUDA_offset, (void *)&a_CUDA_offset, 
+            (void *)&GPUVec[currentGPU].monomial_CUDA, (void *)&GPUVec[currentGPU].twiddleTable_CUDA, (void *)&GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, (void *)&GPUVec[currentGPU].params_CUDA};
+        cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT, IFFT>), digitsG2/2, FFT::block_dim, 
+            kernelArgs, FFT::shared_memory_size, GPUVec[currentGPU].streams[s % SM_count]);
+        cudaMemcpyAsync(acc_d_arr + s*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
+    }
+
+    /* Synchronize all GPUs */
+    for(int g = 0; g < GPU_num; g++){
+        cudaSetDevice(g);
+        CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+        CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
+    std::cout << bootstrap_num << "AddToAccCGGI_CUDA_core GPU time : " << elapsed.count() << " ms" << std::endl;
+
+    /* cast acc_d_arr back to NativePoly */
+    for (int s = 0; s < bootstrap_num; s++) {
+        NativeVector ret0(N, Q), ret1(N, Q);
+        for(int i = 0; i < NHalf; i++){
+            ret0[i] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + i].real());
+            ret0[i + NHalf] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + i].imag());
+            ret1[i] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + NHalf + i].real());
+            ret1[i + NHalf] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + NHalf + i].imag());
+        }
+        std::vector<NativePoly> res(2);
+        res[0] = NativePoly(polyParams, Format::COEFFICIENT, false);
+        res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
+        res[0].SetValues(std::move(ret0), Format::COEFFICIENT);
+        res[1].SetValues(std::move(ret1), Format::COEFFICIENT);
+
+        (*acc)[s] = std::make_shared<RLWECiphertextImpl>(std::move(res));
+    }
+
+    /* Free memory */     
+    cudaFreeHost(a_arr);
+    cudaFreeHost(acc_d_arr);
+}
+
+// template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
+// void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
+//         std::shared_ptr<std::vector<RLWECiphertext>> acc, std::string mode)
+// {   
+//     /* HE parameters set */
+//     auto mod                = a[0].GetModulus();
+//     uint32_t modInt         = mod.ConvertToInt();
+//     auto Q                  = params->GetQ();
+//     NativeInteger QHalf     = Q >> 1;
+//     int64_t Q_int           = Q.ConvertToInt();
+//     uint32_t N              = params->GetN();
+//     uint32_t NHalf          = N >> 1;
+//     uint32_t n              =  a[0].GetLength();
+//     uint32_t M              = 2 * params->GetN();
+//     uint32_t digitsG2       = params->GetDigitsG() << 1;
+//     auto polyParams         = params->GetPolyParams();
+
+//     int bootstrap_num       = acc->size();
+//     int GPU_num             = gpuInfoList.size();
+//     int SM_count            = gpuInfoList[0].multiprocessorCount;
+
+//     /* Configure cuFFTDx */
+//     using FFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() + cufftdx::ElementsPerThread<8>() +
+//                         cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<FFT_num>() + cufftdx::SM<arch>());
+
+//     using IFFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() + cufftdx::ElementsPerThread<8>() +
+//                             cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
+
+//     using FFT_multi      = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() +
+//                             cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
+
+//     using IFFT_multi     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() +
+//                             cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
+
+//     for(int g = 0; g < GPU_num; g++){
+//         /* Set device */
+//         cudaSetDevice(g);
+
+//         /* Increase max shared memory */
+//         auto it = sharedMemMap.find(arch);
+//         int maxSharedMemoryAvail = it->second * 1024;
+//         // Single block Bootstrapping shared memory size
+//         if(FFT::shared_memory_size < maxSharedMemoryAvail){
+//             CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size));
+//         }
+//         // Multi block Bootstrapping shared memory size
+//         if(FFT_multi::shared_memory_size < maxSharedMemoryAvail){
+//             CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_multi::shared_memory_size));
+//         }
+//     }
+
+//     /* Check whether block size exceeds cuda limitation */
+//     if(mode == "SINGLE"){
+//         if((NHalf / FFT::elements_per_thread * digitsG2) > gpuInfoList[0].maxThreadsPerBlock){
+//             std::cerr << "Exceed Maximum blocks per threads (" << gpuInfoList[0].maxThreadsPerBlock << ")\n";
+//             std::cerr << "Using " << (NHalf / FFT::elements_per_thread * digitsG2) << " threads" << ")\n";
+//             std::cerr << "NHalf: " << NHalf << "FFT::elements_per_thread: " << FFT::elements_per_thread << "digitsG2: " << digitsG2 << ")\n";
+//             exit(1);
+//         }
+//     }
+//     else if(mode == "MULTI"){
+//         if((NHalf / FFT_multi::elements_per_thread * 2) > gpuInfoList[0].maxThreadsPerBlock){
+//             std::cerr << "Exceed Maximum blocks per threads (" << gpuInfoList[0].maxThreadsPerBlock << ")\n";
+//             std::cerr << "Using " << (NHalf / FFT_multi::elements_per_thread * digitsG2) << " threads" << ")\n";
+//             std::cerr << "NHalf: " << NHalf << "FFT::elements_per_thread: " << FFT_multi::elements_per_thread << ")\n";
+//             exit(1);
+//         }
+//     }
+
+//     /* Initialize a_arr */
+//     uint64_t* a_arr;
+//     cudaMallocHost((void**)&a_arr, bootstrap_num * n * sizeof(uint64_t));
+//     for (int s = 0; s < bootstrap_num; s++)
+//         for (size_t i = 0; i < n; ++i)
+//             a_arr[s*n + i] = (mod.ModSub(a[s][i], mod) * (M / modInt)).ConvertToInt();
+
+//     /* Initialize acc_d_arr */
+//     Complex* acc_d_arr;
+//     cudaMallocHost((void**)&acc_d_arr, bootstrap_num * 2 * NHalf * sizeof(Complex));
+//     for (int s = 0; s < bootstrap_num; s++){
+//         for(int i = 0; i < 2; i++){
+//             NativePoly& acc_t((*acc)[s]->GetElements()[i]);
+//             for(int j = 0; j < NHalf; j++){
+//                 acc_d_arr[s*2*NHalf + i*NHalf + j] = Complex(static_cast<double>(acc_t[j].ConvertToInt()), static_cast<double>(acc_t[j + NHalf].ConvertToInt()));
+//             }
+//         }
+//     }
+
+//     auto start = std::chrono::high_resolution_clock::now();
+
+//     if(mode == "SINGLE"){
+//         uint32_t syncNum;
+//         auto it = synchronizationMap.find({arch, FFT_dimension});
+//         if (it != synchronizationMap.end() && it->second != 0) {
+//             syncNum = it->second;
+//         } else {
+//             std::cerr << "Hasn't tested on this GPU or N yet, please contact r11922138@ntu.edu.tw" << std::endl;
+//             exit(1);
+//         }
+//         for (int s = 0; s < bootstrap_num; s++) {
+//             int currentGPU = (s / SM_count) % GPU_num;
+//             if(s % SM_count == 0){
+//                 cudaSetDevice(currentGPU);
+//             }
+//             cudaMemcpyAsync(GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+//             cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+//             bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size, GPUVec[currentGPU].streams[s % SM_count]>>>
+//                 (GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].ct_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].dct_CUDA + (s % SM_count)*digitsG2*NHalf,
+//                     GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, GPUVec[currentGPU].monomial_CUDA, GPUVec[currentGPU].twiddleTable_CUDA, GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, GPUVec[currentGPU].params_CUDA, syncNum);
+//             cudaMemcpyAsync(acc_d_arr + s*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
+//         }
+//     }
+//     else if(mode == "MULTI"){
+//         Complex_d* acc_CUDA_offset, *ct_CUDA_offset, *dct_CUDA_offset;
+//         uint64_t* a_CUDA_offset;
+//         for (int s = 0; s < bootstrap_num; s++) {
+//             int currentGPU = (s / SM_count) % GPU_num;
+//             if(s % SM_count == 0){
+//                 cudaSetDevice(currentGPU);
+//             }
+//             acc_CUDA_offset = GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf;
+//             ct_CUDA_offset = GPUVec[currentGPU].ct_CUDA + (s % SM_count)*2*NHalf;
+//             dct_CUDA_offset = GPUVec[currentGPU].dct_CUDA + (s % SM_count)*digitsG2*NHalf;
+//             a_CUDA_offset = GPUVec[currentGPU].a_CUDA + (s % SM_count)*n;
+//             cudaMemcpyAsync(GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+//             cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+//             void *kernelArgs[] = {(void *)&acc_CUDA_offset, (void *)&ct_CUDA_offset, (void *)&dct_CUDA_offset, (void *)&a_CUDA_offset, 
+//                 (void *)&GPUVec[currentGPU].monomial_CUDA, (void *)&GPUVec[currentGPU].twiddleTable_CUDA, (void *)&GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, (void *)&GPUVec[currentGPU].params_CUDA};
+//             cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT_multi, IFFT_multi>), digitsG2/2, FFT_multi::block_dim, 
+//                 kernelArgs, FFT_multi::shared_memory_size, GPUVec[currentGPU].streams[s % SM_count]);
+//             cudaMemcpyAsync(acc_d_arr + s*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
+//         }
+//     }
+
+//     /* Synchronize all GPUs */
+//     for(int g = 0; g < GPU_num; g++){
+//         cudaSetDevice(g);
+//         CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+//         CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+//     }
+//     auto end = std::chrono::high_resolution_clock::now();
+//     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
+//     std::cout << bootstrap_num << "AddToAccCGGI_CUDA_core GPU time : " << elapsed.count() << " ms" << std::endl;
+
+//     /* cast acc_d_arr back to NativePoly */
+//     for (int s = 0; s < bootstrap_num; s++) {
+//         NativeVector ret0(N, Q), ret1(N, Q);
+//         for(int i = 0; i < NHalf; i++){
+//             ret0[i] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + i].real());
+//             ret0[i + NHalf] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + i].imag());
+//             ret1[i] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + NHalf + i].real());
+//             ret1[i + NHalf] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + NHalf + i].imag());
+//         }
+//         std::vector<NativePoly> res(2);
+//         res[0] = NativePoly(polyParams, Format::COEFFICIENT, false);
+//         res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
+//         res[0].SetValues(std::move(ret0), Format::COEFFICIENT);
+//         res[1].SetValues(std::move(ret1), Format::COEFFICIENT);
+
+//         (*acc)[s] = std::make_shared<RLWECiphertextImpl>(std::move(res));
+//     }
+
+//     /* Free memory */     
+//     cudaFreeHost(a_arr);
+//     cudaFreeHost(acc_d_arr);
+// }
 
 void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ctExt, NativeInteger fmod)
 {

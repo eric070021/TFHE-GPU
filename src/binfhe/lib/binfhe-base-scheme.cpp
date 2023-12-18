@@ -487,7 +487,7 @@ RLWECiphertext BinFHEScheme::BootstrapGateCore(const std::shared_ptr<BinFHECrypt
     // the following loop is the bottleneck of bootstrapping/binary gate
     // evaluation
     auto acc = std::make_shared<RLWECiphertextImpl>(std::move(res));
-    ACCscheme->EvalAcc(RGSWParams, ek, acc, ct->GetA(), "NTT");
+    ACCscheme->EvalAcc(RGSWParams, ek, acc, ct->GetA(), "NTT", 0);
     return acc;
 }
 
@@ -529,7 +529,7 @@ RLWECiphertext BinFHEScheme::BootstrapFuncCore(const std::shared_ptr<BinFHECrypt
     // the following loop is the bottleneck of bootstrapping/binary gate
     // evaluation
     auto acc = std::make_shared<RLWECiphertextImpl>(std::move(res));
-    ACCscheme->EvalAcc(RGSWParams, ek, acc, ct->GetA(), mode);
+    ACCscheme->EvalAcc(RGSWParams, ek, acc, ct->GetA(), mode, fmod.ConvertToInt());
     return acc;
 }
 
@@ -846,7 +846,7 @@ std::shared_ptr<std::vector<RLWECiphertext>> BinFHEScheme::BootstrapGateCore(con
     // main accumulation computation
     // the following loop is the bottleneck of bootstrapping/binary gate
     // evaluation
-    ACCscheme->EvalAcc(RGSWParams, ek, acc_vec, a);
+    ACCscheme->EvalAcc(RGSWParams, ek, acc_vec, a, 0);
     return acc_vec;
 }
 
@@ -892,7 +892,7 @@ std::shared_ptr<std::vector<RLWECiphertext>> BinFHEScheme::BootstrapFuncCore(con
     // main accumulation computation
     // the following loop is the bottleneck of bootstrapping/binary gate
     // evaluation
-    ACCscheme->EvalAcc(RGSWParams, ek, acc_vec, a);
+    ACCscheme->EvalAcc(RGSWParams, ek, acc_vec, a, fmod.ConvertToInt());
     return acc_vec;
 }
 

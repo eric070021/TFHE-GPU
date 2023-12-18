@@ -151,10 +151,13 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
 /***************************************
 *  ACC that support vector of ciphertexts 
 ****************************************/
-void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, std::shared_ptr<std::vector<RLWECiphertext>> acc, std::string mode);
+void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, std::shared_ptr<std::vector<RLWECiphertext>> acc, uint64_t fmod);
 
 template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
-void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, std::shared_ptr<std::vector<RLWECiphertext>> acc, std::string mode);
+void AddToAccCGGI_CUDA_single(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, std::shared_ptr<std::vector<RLWECiphertext>> acc, uint64_t fmod);
+
+template<uint32_t arch, uint32_t FFT_dimension>
+void AddToAccCGGI_CUDA_multi(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, std::shared_ptr<std::vector<RLWECiphertext>> acc, uint64_t fmod);
 
 /***************************************
 *  Modswitch, Keyswitch, and Modswitch combo

@@ -141,7 +141,7 @@ RingGSWACCKey RingGSWAccumulatorCGGI::KeyGenAcc(const std::shared_ptr<RingGSWCry
 }
 
 void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek,
-                                     RLWECiphertext& acc, const NativeVector& a, std::string mode) const {       
+                                     RLWECiphertext& acc, const NativeVector& a, std::string mode, uint64_t fmod) const {       
     if(mode == "NTT"){
         auto mod        = a.GetModulus();
         uint32_t n      = a.GetLength();
@@ -199,7 +199,7 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
         auto acc_vec = std::make_shared<std::vector<RLWECiphertext>> (1, acc);
 
         // Blind rotate
-        AddToAccCGGI_CUDA(params, a_vec, acc_vec, "SINGLE");
+        AddToAccCGGI_CUDA(params, a_vec, acc_vec, fmod);
 
         acc = (*acc_vec)[0];
     }
@@ -210,8 +210,8 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
 }
 
 void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, 
-        std::shared_ptr<std::vector<RLWECiphertext>> acc, const std::vector<NativeVector>& a) const {
-    AddToAccCGGI_CUDA(params, a, acc, "SINGLE");
+        std::shared_ptr<std::vector<RLWECiphertext>> acc, const std::vector<NativeVector>& a, uint64_t fmod) const {
+    AddToAccCGGI_CUDA(params, a, acc, fmod);
 }
 
 

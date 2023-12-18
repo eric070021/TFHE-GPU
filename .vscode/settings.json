@@ -82,7 +82,8 @@
         "stop_token": "cpp",
         "valarray": "cpp",
         "variant": "cpp",
-        "__locale": "cpp"
+        "__locale": "cpp",
+        "target": "cpp"
     },
     "cmake.configureOnOpen": false
 }

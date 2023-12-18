@@ -68,7 +68,7 @@ public:
    * @param acc previous value of the accumulator
    */
     void EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, RLWECiphertext& acc,
-                 const NativeVector& a, std::string mode) const override;
+                 const NativeVector& a, std::string mode, uint64_t fmod) const override;
 
 private:
     RingGSWEvalKey KeyGenDM(const std::shared_ptr<RingGSWCryptoParams> params, const NativePoly& skNTT,
