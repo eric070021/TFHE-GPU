@@ -317,12 +317,20 @@ std::vector<LWECiphertext> BinFHEContext::EvalBinGate(BINGATE gate, const std::v
     return (*m_binfhescheme->EvalBinGate(m_params, gate, m_BTKey, ct1, ct2));
 }
 
-void BinFHEContext::GPUSetupp() const{
+void BinFHEContext::GPUSetup() const{
+    if(m_timeOptimization){
+        std::string errMsg("ERROR: Time optimization is not supported in GPU");
+        OPENFHE_THROW(not_implemented_error, errMsg);
+    }
     if(m_BTKey.BSkey == 0 || m_BTKey.KSkey == 0) {
         std::string errMsg("ERROR: Need to call BTKeyGen before calling GPUSetup");
         OPENFHE_THROW(openfhe_error, errMsg);
     }
-    GPUSetup(m_params, m_BTKey.BSkey, m_BTKey.KSkey); 
+    GPUFFTBootstrap::GPUSetup(m_params, m_BTKey.BSkey, m_BTKey.KSkey); 
+}
+
+void BinFHEContext::GPUClean() const{
+    GPUFFTBootstrap::GPUClean();
 }
 
 }  // namespace lbcrypto

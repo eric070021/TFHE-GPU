@@ -357,10 +357,9 @@ public:
    */
     std::vector<LWECiphertext> EvalBinGate(BINGATE gate, const std::vector<LWECiphertext>& ct1, const std::vector<LWECiphertext>& ct2) const;
 
-    /**
-   * Setup GPU for bootstrapping
-   */
-    void GPUSetupp() const;
+    void GPUSetup() const;
+
+    void GPUClean() const;
 
 private:
     // Shared pointer to Ring GSW + LWE parameters

@@ -13,6 +13,23 @@
 
 namespace lbcrypto {
 
+// Definition of the static member variables
+std::vector<GPUFFTBootstrap::GPUInfo> GPUFFTBootstrap::gpuInfoList;
+std::vector<GPUFFTBootstrap::GPUPointer> GPUFFTBootstrap::GPUVec;
+const std::map<uint32_t, uint32_t> GPUFFTBootstrap::synchronizationMap ={
+  // dim | syncNum
+    {512,    8},
+    {1024,  12},
+};
+const std::map<uint32_t, int> GPUFFTBootstrap::sharedMemMap = {
+ // arch | shared memory capacity (KB)
+    {700,  96}, // V100
+    {800, 163}, // A100
+    {860,  99}, // RTX 3090
+    {890,  99}, // RTX 4090
+    {900, 227}, // H100
+};
+
 __device__ inline void ModSubFastEq_CUDA(uint64_t &a, const uint64_t &b, const uint64_t &modulus) {
         if (a >= b) {
             a -= b;
@@ -602,7 +619,7 @@ __global__ void cuFFTDxFWD(Complex_d* data, Complex_d* twiddleTable_CUDA){
     }
 }
 
-void GPUSetup(const std::shared_ptr<BinFHECryptoParams> params, RingGSWACCKey BSkey, LWESwitchingKey KSkey)
+void GPUFFTBootstrap::GPUSetup(const std::shared_ptr<BinFHECryptoParams> params, RingGSWACCKey BSkey, LWESwitchingKey KSkey)
 {
     /* Setting up available GPU INFO */
     int deviceCount;
@@ -747,7 +764,7 @@ void GPUSetup(const std::shared_ptr<BinFHECryptoParams> params, RingGSWACCKey BS
 }
 
 template<uint32_t arch, uint32_t FFT_dimension>
-void GPUSetup_core(const std::shared_ptr<BinFHECryptoParams> params, RingGSWACCKey BSkey, LWESwitchingKey KSkey)
+void GPUFFTBootstrap::GPUSetup_core(const std::shared_ptr<BinFHECryptoParams> params, RingGSWACCKey BSkey, LWESwitchingKey KSkey)
 {
     /* HE Parameters Set */
     auto RGSWParams             = params->GetRingGSWParams();
@@ -815,7 +832,6 @@ void GPUSetup_core(const std::shared_ptr<BinFHECryptoParams> params, RingGSWACCK
             for(int l = 0; l < digitsG2; l++){
                 for(int m = 0; m < 2; m++){
                     std::vector<Complex> temp = (*(*bootstrappingKey_FFT)[0][num_key][i])[l][m];
-                    DiscreteFourierTransform::NegacyclicInverseTransform(temp);
                     for(int j = 0; j < NHalf; j++){
                         bootstrappingKey_host[num_key*n*RGSW_size + i*RGSW_size + l*2*NHalf + m*NHalf + j] = Complex(temp[j].real(), temp[j + NHalf].real());
                     }
@@ -950,7 +966,30 @@ void GPUSetup_core(const std::shared_ptr<BinFHECryptoParams> params, RingGSWACCK
     cudaFreeHost(monomial_arr);
 }
 
-std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> KeyCopy_FFT(const std::shared_ptr<RingGSWCryptoParams> params, 
+void GPUFFTBootstrap::GPUClean(){
+    int GPU_num  = gpuInfoList.size();
+    for(int g = 0; g < GPU_num; g++){
+        cudaSetDevice(g);
+        cudaFree(GPUVec[g].GINX_bootstrappingKey_CUDA);
+        cudaFree(GPUVec[g].keySwitchingkey_CUDA);
+        cudaFree(GPUVec[g].monomial_CUDA);
+        cudaFree(GPUVec[g].twiddleTable_CUDA);
+        cudaFree(GPUVec[g].params_CUDA);
+        cudaFree(GPUVec[g].ct_CUDA);
+        cudaFree(GPUVec[g].dct_CUDA);
+        cudaFree(GPUVec[g].acc_CUDA);
+        cudaFree(GPUVec[g].a_CUDA);
+        cudaFree(GPUVec[g].ctExt_CUDA);
+        for (int s = 0; s < gpuInfoList[g].multiprocessorCount; s++) {
+            cudaStreamDestroy(GPUVec[g].streams[s]);
+        }
+    }
+
+    gpuInfoList.clear();
+    GPUVec.clear();
+}
+
+std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> GPUFFTBootstrap::KeyCopy_FFT(const std::shared_ptr<RingGSWCryptoParams> params, 
     RingGSWEvalKey ek){
 
     NativeInteger Q   = params->GetQ();
@@ -969,31 +1008,33 @@ std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> KeyCopy_FFT(cons
             ek_t.SetFormat(Format::COEFFICIENT);
             for (size_t l = 0; l < N; ++l) {
                 NativeInteger::SignedNativeInt d = (ek_t[l] < QHalf) ? ek_t[l].ConvertToInt() : (ek_t[l].ConvertToInt() - Q_int);
-                (*ek_d)[j][k][l].real(static_cast<BasicFloat>(d));
+                (*ek_d)[j][k][l].real(static_cast<double>(d));
             }
-        }
-    }
-
-    // transform to evaluation domain
-    for (size_t i = 0; i < digitsG2; ++i) {
-        for (size_t j = 0; j < 2; ++j) {
-            DiscreteFourierTransform::NegacyclicForwardTransform((*ek_d)[i][j]);
         }
     }
 
     return ek_d;
 }
 
-void EvalAcc_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
+void GPUFFTBootstrap::EvalAcc_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
         std::shared_ptr<std::vector<RLWECiphertext>> acc, uint64_t fmod)
 {   
-    std::string mode = "SINGLE";
-
     /* Parameters Set */
-    uint32_t N            = params->GetN();
-    uint32_t NHalf     = N >> 1;
-    uint32_t digitsG2 = params->GetDigitsG() << 1;
-    uint32_t arch = gpuInfoList[0].major * 100 + gpuInfoList[0].minor * 10;
+    uint32_t N          = params->GetN();
+    uint32_t NHalf      = N >> 1;
+    uint32_t digitsG2   = params->GetDigitsG() << 1;
+    uint32_t arch       = gpuInfoList[0].major * 100 + gpuInfoList[0].minor * 10;
+
+    /* Determine mode of EvalAcc_CUDA */
+    std::string mode = "SINGLE";
+    if((NHalf*digitsG2/8) > 1024){ // 1024 is the maximum number of threads per block
+        mode = "MULTI";
+    }
+    auto sharedMem_it = sharedMemMap.find(arch);
+    int maxSharedMemoryAvail = sharedMem_it->second * 1024;
+    if((NHalf*digitsG2*8) > maxSharedMemoryAvail){ // exceed the maximum shared memory per block
+        mode = "MULTI";
+    }
 
     if(mode == "SINGLE"){
         switch (arch){
@@ -1012,6 +1053,18 @@ void EvalAcc_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::
                                 break;
                             case 8:
                                 AddToAccCGGI_CUDA_single<700, 512, 8>(params, a, acc, fmod);
+                                break;
+                            case 10:
+                                AddToAccCGGI_CUDA_single<700, 512, 10>(params, a, acc, fmod);
+                                break;
+                            case 12:
+                                AddToAccCGGI_CUDA_single<700, 512, 12>(params, a, acc, fmod);
+                                break;
+                            case 14:
+                                AddToAccCGGI_CUDA_single<700, 512, 14>(params, a, acc, fmod);
+                                break;
+                            case 16:
+                                AddToAccCGGI_CUDA_single<700, 512, 16>(params, a, acc, fmod);
                                 break;
                             default:
                                 std::cerr << "Unsupported digitsG in Single block mode\n";
@@ -1058,6 +1111,18 @@ void EvalAcc_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::
                             case 8:
                                 AddToAccCGGI_CUDA_single<800, 512, 8>(params, a, acc, fmod);
                                 break;
+                            case 10:
+                                AddToAccCGGI_CUDA_single<800, 512, 10>(params, a, acc, fmod);
+                                break;
+                            case 12:
+                                AddToAccCGGI_CUDA_single<800, 512, 12>(params, a, acc, fmod);
+                                break;
+                            case 14:
+                                AddToAccCGGI_CUDA_single<800, 512, 14>(params, a, acc, fmod);
+                                break;
+                            case 16:
+                                AddToAccCGGI_CUDA_single<800, 512, 16>(params, a, acc, fmod);
+                                break;
                             default:
                                 std::cerr << "Unsupported digitsG in Single block mode\n";
                                 exit(1);
@@ -1102,6 +1167,18 @@ void EvalAcc_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::
                                 break;
                             case 8:
                                 AddToAccCGGI_CUDA_single<860, 512, 8>(params, a, acc, fmod);
+                                break;
+                            case 10:
+                                AddToAccCGGI_CUDA_single<860, 512, 10>(params, a, acc, fmod);
+                                break;
+                            case 12:
+                                AddToAccCGGI_CUDA_single<860, 512, 12>(params, a, acc, fmod);
+                                break;
+                            case 14:
+                                AddToAccCGGI_CUDA_single<860, 512, 14>(params, a, acc, fmod);
+                                break;
+                            case 16:
+                                AddToAccCGGI_CUDA_single<860, 512, 16>(params, a, acc, fmod);
                                 break;
                             default:
                                 std::cerr << "Unsupported digitsG in Single block mode\n";
@@ -1148,6 +1225,18 @@ void EvalAcc_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::
                             case 8:
                                 AddToAccCGGI_CUDA_single<890, 512, 8>(params, a, acc, fmod);
                                 break;
+                            case 10:
+                                AddToAccCGGI_CUDA_single<890, 512, 10>(params, a, acc, fmod);
+                                break;
+                            case 12:
+                                AddToAccCGGI_CUDA_single<890, 512, 12>(params, a, acc, fmod);
+                                break;
+                            case 14:
+                                AddToAccCGGI_CUDA_single<890, 512, 14>(params, a, acc, fmod);
+                                break;
+                            case 16:
+                                AddToAccCGGI_CUDA_single<890, 512, 16>(params, a, acc, fmod);
+                                break;
                             default:
                                 std::cerr << "Unsupported digitsG in Single block mode\n";
                                 exit(1);
@@ -1192,6 +1281,18 @@ void EvalAcc_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::
                                 break;
                             case 8:
                                 AddToAccCGGI_CUDA_single<900, 512, 8>(params, a, acc, fmod);
+                                break;
+                            case 10:
+                                AddToAccCGGI_CUDA_single<900, 512, 10>(params, a, acc, fmod);
+                                break;
+                            case 12:
+                                AddToAccCGGI_CUDA_single<900, 512, 12>(params, a, acc, fmod);
+                                break;
+                            case 14:
+                                AddToAccCGGI_CUDA_single<900, 512, 14>(params, a, acc, fmod);
+                                break;
+                            case 16:
+                                AddToAccCGGI_CUDA_single<900, 512, 16>(params, a, acc, fmod);
                                 break;
                             default:
                                 std::cerr << "Unsupported digitsG in Single block mode\n";
@@ -1332,7 +1433,7 @@ void EvalAcc_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::
 }
 
 template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
-void AddToAccCGGI_CUDA_single(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
+void GPUFFTBootstrap::AddToAccCGGI_CUDA_single(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
         std::shared_ptr<std::vector<RLWECiphertext>> acc, uint64_t fmod)
 {   
     /* HE parameters set */
@@ -1362,13 +1463,13 @@ void AddToAccCGGI_CUDA_single(const std::shared_ptr<RingGSWCryptoParams> params,
 
 
     /* Increase max shared memory */
-    auto sharedMem = sharedMemMap.find(arch);
-    int maxSharedMemoryAvail = sharedMem->second * 1024;
+    auto sharedMem_it = sharedMemMap.find(arch);
+    int maxSharedMemoryAvail = sharedMem_it->second * 1024;
     for(int g = 0; g < GPU_num; g++){
         cudaSetDevice(g);
         // Single block Bootstrapping shared memory size
         if(FFT::shared_memory_size < maxSharedMemoryAvail){
-            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size));
+            cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size);
         }
     }
 
@@ -1402,14 +1503,8 @@ void AddToAccCGGI_CUDA_single(const std::shared_ptr<RingGSWCryptoParams> params,
     auto start = std::chrono::high_resolution_clock::now();
 
     /* Main Bootstrapping */
-    uint32_t syncNum;
-    auto it = synchronizationMap.find({arch, FFT_dimension});
-    if (it != synchronizationMap.end() && it->second != 0) {
-        syncNum = it->second;
-    } else {
-        std::cerr << "Hasn't tested on this GPU or N yet, please contact r11922138@ntu.edu.tw" << std::endl;
-        exit(1);
-    }
+    auto sync_it = synchronizationMap.find(FFT_dimension);
+    uint32_t syncNum = sync_it->second;
     for (int s = 0; s < bootstrap_num; s++) {
         int currentGPU = (s / SM_count) % GPU_num;
         if(s % SM_count == 0){
@@ -1433,7 +1528,7 @@ void AddToAccCGGI_CUDA_single(const std::shared_ptr<RingGSWCryptoParams> params,
 
     auto end = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
-    std::cout << bootstrap_num << "AddToAccCGGI_CUDA_core GPU time : " << elapsed.count() << " ms" << std::endl;
+    //std::cout << bootstrap_num << "AddToAccCGGI_CUDA_core GPU time : " << elapsed.count() << " ms" << std::endl;
 
     /* cast acc_d_arr back to NativePoly */
     for (int s = 0; s < bootstrap_num; s++) {
@@ -1459,7 +1554,7 @@ void AddToAccCGGI_CUDA_single(const std::shared_ptr<RingGSWCryptoParams> params,
 }
 
 template<uint32_t arch, uint32_t FFT_dimension>
-void AddToAccCGGI_CUDA_multi(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
+void GPUFFTBootstrap::AddToAccCGGI_CUDA_multi(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
         std::shared_ptr<std::vector<RLWECiphertext>> acc, uint64_t fmod)
 {   
     /* HE parameters set */
@@ -1488,13 +1583,13 @@ void AddToAccCGGI_CUDA_multi(const std::shared_ptr<RingGSWCryptoParams> params, 
                             cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
 
     /* Increase max shared memory */
-    auto sharedMem = sharedMemMap.find(arch);
-    int maxSharedMemoryAvail = sharedMem->second * 1024;
+    auto sharedMem_it = sharedMemMap.find(arch);
+    int maxSharedMemoryAvail = sharedMem_it->second * 1024;
     for(int g = 0; g < GPU_num; g++){
         cudaSetDevice(g);
         // Multi block Bootstrapping shared memory size
         if(FFT::shared_memory_size < maxSharedMemoryAvail){
-            CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size));
+            cudaFuncSetAttribute(bootstrappingMultiBlock<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size);
         }
     }
 
@@ -1558,7 +1653,7 @@ void AddToAccCGGI_CUDA_multi(const std::shared_ptr<RingGSWCryptoParams> params, 
 
     auto end = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
-    std::cout << bootstrap_num << "AddToAccCGGI_CUDA_core GPU time : " << elapsed.count() << " ms" << std::endl;
+    //std::cout << bootstrap_num << "AddToAccCGGI_CUDA_core GPU time : " << elapsed.count() << " ms" << std::endl;
 
     /* cast acc_d_arr back to NativePoly */
     for (int s = 0; s < bootstrap_num; s++) {
@@ -1583,7 +1678,7 @@ void AddToAccCGGI_CUDA_multi(const std::shared_ptr<RingGSWCryptoParams> params, 
     cudaFreeHost(acc_d_arr);
 }
 
-void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ctExt, NativeInteger fmod)
+void GPUFFTBootstrap::MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ctExt, NativeInteger fmod)
 {
     /* HE parameters set */
     uint32_t n              = params->Getn();
@@ -1623,9 +1718,10 @@ void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_p
         CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
         CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
     }
+
     auto end = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
-    std::cout << bootstrap_num << "MKMSwitch_CUDA GPU time : " << elapsed.count() << " ms" << std::endl;
+    //std::cout << bootstrap_num << "MKMSwitch_CUDA GPU time : " << elapsed.count() << " ms" << std::endl;
 
     /* Copy ctExt_host back to ctExt */
     for (int s = 0; s < bootstrap_num; s++){

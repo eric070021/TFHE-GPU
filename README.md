@@ -1,6 +1,5 @@
 # openFHE-GPU
 
-![License](https://img.shields.io/badge/License-MIT-blue.svg)
 ![CMake Version](https://img.shields.io/badge/CMake-%3E%3D3.18-brightgreen.svg)
 
 A high-performance library that leverages GPU acceleration to boost the TFHE (Fully Homomorphic Encryption) bootstrapping process.
@@ -11,10 +10,16 @@ A high-performance library that leverages GPU acceleration to boost the TFHE (Fu
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Building](#building)
+- [Supported APIs](#supported-apis)
+  - [GPU Setup](#gpu-setup)
+  - [GPU Clean](#gpu-clean)
+  - [EvalFunc](#evalfunc)
+  - [EvalBinGate](#evalbingate)
+- [Sample Program](#sample-program)
 
 ## Introduction
 
-**openFHE-GPU** is a powerful library designed to enhance the TFHE bootstrapping process by harnessing the computational capabilities of modern GPUs. It provides an efficient and performant way to accelerate secure computations, enabling faster execution of homomorphically encrypted operations.
+**openFHE-GPU** is a powerful library designed to enhance the TFHE bootstrapping by leveraging the computational capabilities of modern GPUs. It provides an efficient and performant way to accelerate secure computations, enabling faster execution of homomorphically encrypted operations.
 
 ## Getting Started
 
@@ -45,6 +50,108 @@ To build the project, follow these steps:
 ```
 4. Run the example to test the library:
 ```bash
-   ./build_release/bin/examples/binfhe/boolean
-   ./build_release/bin/examples/binfhe/eval-function
+   ./build_release/bin/examples/binfhe/unittest
+```
+## Supported APIs
+
+### GPU Setup
+Make sure to call this api after generating bootstrapping key.
+```cpp
+cc.GPUSetup();
+```
+
+### GPU Clean
+Call this api at the end of the program.
+```cpp
+cc.GPUClean();
+```
+
+### EvalFunc
+- **Input**:
+  - Vector of LWECiphertext
+  - LookUpTable
+- **Output**:
+  - Vector of LWECiphertext
+```cpp
+std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT);
+```
+
+### EvalBinGate
+- **Input**:
+  - Gate you want to evaluate
+  - Vector of LWECiphertext 1
+  - Vector of LWECiphertext 2
+- **Output**:
+  - Vector of LWECiphertext
+```cpp
+std::vector<LWECiphertext> EvalBinGate(BINGATE gate, const std::vector<LWECiphertext>& ct1, const std::vector<LWECiphertext>& ct2) const;
+```
+
+## Sample Program
+The program below shows an example calling EvalFunc api.
+```cpp
+#include "binfhecontext.h"
+
+using namespace lbcrypto;
+
+int main() {
+    // Sample Program: Step 1: Set CryptoContext
+    auto cc = BinFHEContext();
+    cc.GenerateBinFHEContext(STD128, true, 12);
+
+    // Sample Program: Step 2: Key Generation
+
+    // Generate the secret key
+    auto sk = cc.KeyGen();
+
+    std::cout << "Generating the bootstrapping keys..." << std::endl;
+
+    // Generate the bootstrapping keys (refresh and switching keys)
+    cc.BTKeyGen(sk);
+
+    std::cout << "Completed the key generation." << std::endl;
+
+    // Sample Program: Step 3: Setup GPU
+    std::cout << "Setting up GPU..." << std::endl;
+
+    cc.GPUSetup();
+
+    std::cout << "Completed the GPU Setup." << std::endl;
+
+    // Sample Program: Step 4: Create the to-be-evaluated funciton and obtain its corresponding LUT
+    int p = cc.GetMaxPlaintextSpace().ConvertToInt();  // Obtain the maximum plaintext space
+
+    // Initialize Function f(x) = x^3 % p
+    auto fp = [](NativeInteger m, NativeInteger p1) -> NativeInteger {
+        if (m < p1)
+            return (m * m * m) % p1;
+        else
+            return ((m - p1 / 2) * (m - p1 / 2) * (m - p1 / 2)) % p1;
+    };
+
+    // Generate LUT from function f(x)
+    auto lut = cc.GenerateLUTviaFunction(fp, p);
+    std::cout << "Evaluate x^3%" << p << "." << std::endl;
+
+    // Sample Program: Step 5: evalute f(x) homomorphically and decrypt
+    // Note that we check for all the possible plaintexts.
+    std::vector<LWECiphertext> ct_vec;
+    for (int i = 0; i < p; i++) {
+        auto ct1 = cc.Encrypt(sk, i % p, FRESH, p);
+        ct_vec.push_back(ct1);
+    }
+    
+    auto ct_cube_vec = cc.EvalFunc(ct_vec, lut);
+  
+    for (int i = 0; i < p; i++) {
+        LWEPlaintext result;
+        cc.Decrypt(sk, ct_cube_vec[i], &result, p);
+        std::cout << "Input: " << i << ". Expected: " << fp(i % p, p) << ". Evaluated = " << result << std::endl;
+    }
+
+    // Sample Program: Step 6: Clean GPU
+    cc.GPUClean();
+    
+    return 0;
+}
 ```

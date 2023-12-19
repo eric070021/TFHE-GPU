@@ -535,41 +535,41 @@ template <typename Func>
 LWECiphertext BinFHEScheme::BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                                           ConstLWECiphertext ct, const Func f, const NativeInteger fmod) const {
     
-    // auto acc_FFT = BootstrapFuncCore(params, EK.BSkey, ct, f, fmod, "GPU");
+    auto acc_FFT = BootstrapFuncCore(params, EK.BSkey, ct, f, fmod, "GPU");
 
-    // std::vector<NativePoly>& accVec_FFT = acc_FFT->GetElements();
-    // // the accumulator result is encrypted w.r.t. the transposed secret key
-    // // we can transpose "a" to get an encryption under the original secret key
-    // //accVec_FFT[0] = accVec_FFT[0].Transpose();
-    // accVec_FFT[0].SetFormat(Format::COEFFICIENT);
-    // accVec_FFT[1].SetFormat(Format::COEFFICIENT);
-
-    // auto ctExt_FFT  = std::make_shared<LWECiphertextImpl>(std::move(accVec_FFT[0].GetValues()), std::move(accVec_FFT[1][0]));
-    // auto& LWEParams_FFT = params->GetLWEParams();
-    // // Modulus switching to a middle step Q'
-    // auto ctMS_FFT = LWEscheme->ModSwitch(LWEParams_FFT->GetqKS(), ctExt_FFT);
-    // // Key switching
-    // auto ctKS_FFT = LWEscheme->KeySwitch(LWEParams_FFT, EK.KSkey, ctMS_FFT);
-    // // Modulus switching
-    // auto ctMS2_FFT = LWEscheme->ModSwitch(fmod, ctKS_FFT);
-
-    auto acc = BootstrapFuncCore(params, EK.BSkey, ct, f, fmod, "NTT");
-
-    std::vector<NativePoly>& accVec = acc->GetElements();
+    std::vector<NativePoly>& accVec_FFT = acc_FFT->GetElements();
     // the accumulator result is encrypted w.r.t. the transposed secret key
     // we can transpose "a" to get an encryption under the original secret key
-    accVec[0] = accVec[0].Transpose();
-    accVec[0].SetFormat(Format::COEFFICIENT);
-    accVec[1].SetFormat(Format::COEFFICIENT);
+    //accVec_FFT[0] = accVec_FFT[0].Transpose();
+    accVec_FFT[0].SetFormat(Format::COEFFICIENT);
+    accVec_FFT[1].SetFormat(Format::COEFFICIENT);
 
-    auto ctExt      = std::make_shared<LWECiphertextImpl>(std::move(accVec[0].GetValues()), std::move(accVec[1][0]));
-    auto& LWEParams = params->GetLWEParams();
+    auto ctExt_FFT  = std::make_shared<LWECiphertextImpl>(std::move(accVec_FFT[0].GetValues()), std::move(accVec_FFT[1][0]));
+    auto& LWEParams_FFT = params->GetLWEParams();
     // Modulus switching to a middle step Q'
-    auto ctMS = LWEscheme->ModSwitch(LWEParams->GetqKS(), ctExt);
+    auto ctMS_FFT = LWEscheme->ModSwitch(LWEParams_FFT->GetqKS(), ctExt_FFT);
     // Key switching
-    auto ctKS = LWEscheme->KeySwitch(LWEParams, EK.KSkey, ctMS);
+    auto ctKS_FFT = LWEscheme->KeySwitch(LWEParams_FFT, EK.KSkey, ctMS_FFT);
     // Modulus switching
-    auto ctMS2 = LWEscheme->ModSwitch(fmod, ctKS);
+    auto ctMS2_FFT = LWEscheme->ModSwitch(fmod, ctKS_FFT);
+
+    // auto acc = BootstrapFuncCore(params, EK.BSkey, ct, f, fmod, "NTT");
+
+    // std::vector<NativePoly>& accVec = acc->GetElements();
+    // // the accumulator result is encrypted w.r.t. the transposed secret key
+    // // we can transpose "a" to get an encryption under the original secret key
+    // accVec[0] = accVec[0].Transpose();
+    // accVec[0].SetFormat(Format::COEFFICIENT);
+    // accVec[1].SetFormat(Format::COEFFICIENT);
+
+    // auto ctExt      = std::make_shared<LWECiphertextImpl>(std::move(accVec[0].GetValues()), std::move(accVec[1][0]));
+    // auto& LWEParams = params->GetLWEParams();
+    // // Modulus switching to a middle step Q'
+    // auto ctMS = LWEscheme->ModSwitch(LWEParams->GetqKS(), ctExt);
+    // // Key switching
+    // auto ctKS = LWEscheme->KeySwitch(LWEParams, EK.KSkey, ctMS);
+    // // Modulus switching
+    // auto ctMS2 = LWEscheme->ModSwitch(fmod, ctKS);
 
     /************************test*************************/
     // NativeVector& ct_NTT_A = ctMS2->GetA();
@@ -588,7 +588,7 @@ LWECiphertext BinFHEScheme::BootstrapFunc(const std::shared_ptr<BinFHECryptoPara
     // outputFile.close();
     /*****************************************************/
 
-    return ctMS2;
+    return ctMS2_FFT;
 }
 
 /**************************************************************************************************************************************
@@ -671,7 +671,7 @@ std::shared_ptr<std::vector<LWECiphertext>> BinFHEScheme::EvalBinGate(const std:
             (*ctExt)[count]      = std::make_shared<LWECiphertextImpl>(std::move(accVec[0].GetValues()), std::move(b));
         }
 
-        MKMSwitch_CUDA(LWEParams, ctExt, ct1[0]->GetModulus());
+        GPUFFTBootstrap::MKMSwitch_CUDA(LWEParams, ctExt, ct1[0]->GetModulus());
         return ctExt;
     }
 }
@@ -843,7 +843,7 @@ std::shared_ptr<std::vector<RLWECiphertext>> BinFHEScheme::BootstrapGateCore(con
     // main accumulation computation
     // the following loop is the bottleneck of bootstrapping/binary gate
     // evaluation
-    EvalAcc_CUDA(RGSWParams, a, acc_vec);
+    GPUFFTBootstrap::EvalAcc_CUDA(RGSWParams, a, acc_vec);
     return acc_vec;
 }
 
@@ -889,7 +889,7 @@ std::shared_ptr<std::vector<RLWECiphertext>> BinFHEScheme::BootstrapFuncCore(con
     // main accumulation computation
     // the following loop is the bottleneck of bootstrapping/binary gate
     // evaluation
-    EvalAcc_CUDA(RGSWParams, a, acc_vec);
+    GPUFFTBootstrap::EvalAcc_CUDA(RGSWParams, a, acc_vec);
     return acc_vec;
 }
 
@@ -907,7 +907,7 @@ std::shared_ptr<std::vector<LWECiphertext>> BinFHEScheme::BootstrapFunc(const st
     }
 
     auto& LWEParams = params->GetLWEParams();
-    MKMSwitch_CUDA(LWEParams, ctExt, fmod);
+    GPUFFTBootstrap::MKMSwitch_CUDA(LWEParams, ctExt, fmod);
 
     return ctExt;
 }

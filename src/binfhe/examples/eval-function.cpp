@@ -58,7 +58,7 @@ int main() {
     std::cout << "Setting up GPU..." << std::endl;
 
     // Setup GPU
-    cc.GPUSetupp();
+    cc.GPUSetup();
 
     std::cout << "Completed the GPU Setup." << std::endl;
 
@@ -196,5 +196,7 @@ int main() {
     //     std::cout << "Round: " << round + 1 << ", failCount = " << failCount << std::endl;
     // }
 
+    cc.GPUClean();
+    
     return 0;
 }

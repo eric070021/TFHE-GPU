@@ -63,7 +63,7 @@ int main() {
     std::cout << "Setting up GPU..." << std::endl;
 
     // Setup GPU
-    cc.GPUSetupp();
+    cc.GPUSetup();
 
     std::cout << "Completed the GPU Setup." << std::endl;
 
@@ -158,5 +158,7 @@ int main() {
     // auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
     // std::cout << "Time: " << elapsed.count() << " ms" << std::endl;
 
+    cc.GPUClean();
+    
     return 0;
 }

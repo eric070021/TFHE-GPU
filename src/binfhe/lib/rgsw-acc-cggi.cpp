@@ -199,7 +199,7 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
         auto acc_vec = std::make_shared<std::vector<RLWECiphertext>> (1, acc);
 
         // Blind rotate
-        EvalAcc_CUDA(params, a_vec, acc_vec, fmod);
+        GPUFFTBootstrap::EvalAcc_CUDA(params, a_vec, acc_vec, fmod);
 
         acc = (*acc_vec)[0];
     }
