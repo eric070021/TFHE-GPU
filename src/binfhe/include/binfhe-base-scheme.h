@@ -181,6 +181,10 @@ public:
                                           const std::map<uint32_t, RingGSWBTKey>& EKs, ConstLWECiphertext ct,
                                           const NativeInteger beta) const;
 
+    /**************************************************************************************************************************************
+    *  GPU Functions
+    ***************************************************************************************************************************************/
+   
      /**
    * Evaluates a binary gate (calls bootstrapping as a subroutine)
    *
@@ -256,6 +260,9 @@ private:
     LWECiphertext BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                                 ConstLWECiphertext ct, const Func f, const NativeInteger fmod) const;
 
+    /**************************************************************************************************************************************
+    *  GPU Functions
+    ***************************************************************************************************************************************/
 
     /**
    * Core bootstrapping operation
@@ -296,22 +303,6 @@ private:
     template <typename Func>
     std::shared_ptr<std::vector<LWECiphertext>> BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                                 const std::vector<LWECiphertext>& ct, const Func f, const NativeInteger fmod) const;
-
-    /**
-   * GPU setup wrapper
-   *
-   * @param params a shared pointer to BinFHECryptoParams scheme parameters
-   * @param ek Bootstrapping key and keyswitching key
-   */
-    void GPUsetup_wrapper(const std::shared_ptr<BinFHECryptoParams> params, RingGSWBTKey ek) const;
-
-    /**
-   * Copy NTT bootstrapping key to FFT format
-   *
-   * @param params a shared pointer to RingGSWCryptoParams scheme parameters
-   * @param ek Bootstrapping key
-   */
-    std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> KeyCopy_FFT(const std::shared_ptr<RingGSWCryptoParams> params, RingGSWEvalKey ek) const;
 
 protected:
     std::shared_ptr<LWEEncryptionScheme> LWEscheme = std::make_shared<LWEEncryptionScheme>();

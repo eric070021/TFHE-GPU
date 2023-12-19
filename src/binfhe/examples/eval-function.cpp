@@ -55,6 +55,13 @@ int main() {
 
     std::cout << "Completed the key generation." << std::endl;
 
+    std::cout << "Setting up GPU..." << std::endl;
+
+    // Setup GPU
+    cc.GPUSetupp();
+
+    std::cout << "Completed the GPU Setup." << std::endl;
+
     // Sample Program: Step 3: Create the to-be-evaluated funciton and obtain its corresponding LUT
     int p = cc.GetMaxPlaintextSpace().ConvertToInt();  // Obtain the maximum plaintext space
     //int p = 256;

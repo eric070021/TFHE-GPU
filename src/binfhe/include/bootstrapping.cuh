@@ -60,12 +60,14 @@ std::vector<GPUPointer> GPUVec;
 /* Multiple small thread blocks mode bootstrapping */
 template<class FFT, class IFFT>
 __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
-        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* params_CUDA);
+        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* keySwitchingkey_CUDA, 
+            uint64_t* params_CUDA, uint64_t fmod);
 
 /* Single Big thread blocks mode bootstrapping */
 template<class FFT, class IFFT>
 __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
-        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* params_CUDA, uint32_t syncNum);
+        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* keySwitchingkey_CUDA, 
+            uint64_t* params_CUDA, uint64_t fmod, uint32_t syncNum);
 
 /* cufftdx forward function to preprocess BTKey and monomial */
 template<class FFT>
@@ -83,7 +85,9 @@ __global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_
 #include <map>
 #include <string>
 #include <chrono>
+#include "binfhe-base-params.h"
 #include "rgsw-cryptoparameters.h"
+#include "rgsw-acckey.h"
 #include "lwe-cryptoparameters.h"
 #include "rlwe-ciphertext.h"
 #include "math/dftransform.h"
@@ -141,17 +145,30 @@ const std::map<uint32_t, int> sharedMemMap({
 /***************************************
 *  Preprocessing for GPU bootstrapping
 ****************************************/
-void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> bootstrappingKey_FFT, 
-    const std::shared_ptr<RingGSWCryptoParams> RGSWParams, LWESwitchingKey keySwitchingKey, const std::shared_ptr<LWECryptoParams> LWEParams);
+/**
+ * GPU setup wrapper
+ *
+ * @param params a shared pointer to BinFHECryptoParams scheme parameters
+ * @param BSkey Bootstrapping key
+ * @param KSkey keyswitching key
+ */
+void GPUSetup(const std::shared_ptr<BinFHECryptoParams> params, RingGSWACCKey BSkey, LWESwitchingKey KSkey);
 
 template<uint32_t arch, uint32_t FFT_dimension>
-void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> bootstrappingKey_FFT, 
-    const std::shared_ptr<RingGSWCryptoParams> RGSWParams, LWESwitchingKey keySwitchingKey, const std::shared_ptr<LWECryptoParams> LWEParams);
+void GPUSetup_core(const std::shared_ptr<BinFHECryptoParams> params, RingGSWACCKey BSkey, LWESwitchingKey KSkey);
+
+/**
+ * Copy NTT bootstrapping key to FFT format
+ *
+ * @param params a shared pointer to RingGSWCryptoParams scheme parameters
+ * @param ek NTT-base Bootstrapping key
+ */
+std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> KeyCopy_FFT(const std::shared_ptr<RingGSWCryptoParams> params, RingGSWEvalKey ek);
 
 /***************************************
 *  ACC that support vector of ciphertexts 
 ****************************************/
-void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, std::shared_ptr<std::vector<RLWECiphertext>> acc, uint64_t fmod);
+void EvalAcc_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, std::shared_ptr<std::vector<RLWECiphertext>> acc, uint64_t fmod = 0);
 
 template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
 void AddToAccCGGI_CUDA_single(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, std::shared_ptr<std::vector<RLWECiphertext>> acc, uint64_t fmod);

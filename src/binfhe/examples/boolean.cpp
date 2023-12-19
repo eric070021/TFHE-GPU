@@ -60,6 +60,13 @@ int main() {
 
     std::cout << "Completed the key generation." << std::endl;
 
+    std::cout << "Setting up GPU..." << std::endl;
+
+    // Setup GPU
+    cc.GPUSetupp();
+
+    std::cout << "Completed the GPU Setup." << std::endl;
+
     // std::vector<LWECiphertext> ct1_vec, ct2_vec;
     // for (int i = 0; i < 10; i++) {
     //     auto ct1 = cc.Encrypt(sk, 1);

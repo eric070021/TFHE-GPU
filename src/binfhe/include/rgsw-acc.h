@@ -81,30 +81,6 @@ public:
     }
 
     /**
-   * Main accumulator function used in bootstrapping - AP variant
-   *
-   * @param params a shared pointer to RingGSW scheme parameters
-   * @param &input input vector of ciphertexts
-   * @param acc previous value of the accumulator
-   */
-    virtual void EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, std::shared_ptr<std::vector<RLWECiphertext>> acc,
-                         const std::vector<NativeVector>& a, uint64_t fmod) const {
-        OPENFHE_THROW(not_implemented_error, "ACC operation not supported");
-    }
-
-    /**
-   * Modswitch, Keyswitch, and Modswitch combo used after EvalAcc
-   *
-   * @param params a shared pointer to LWECryptoParams scheme parameters
-   * @param &input input vector of ciphertexts
-   * @param Q1 First modulus to switch to
-   * @param Q2 Second modulus to switch to
-   */
-    virtual void MKMSwitch(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ct, NativeInteger fmod) const {
-        OPENFHE_THROW(not_implemented_error, "ACC operation not supported");
-    }
-
-    /**
    * Takes an RLWE ciphertext input and outputs a vector of its digits, i.e., an
    * RLWE' ciphertext
    *

@@ -76,7 +76,8 @@ __global__ void MKMSwitchKernel(uint64_t* ctExt_CUDA, uint64_t* keySwitchingkey_
 template<class FFT, class IFFT>
 __launch_bounds__(FFT::max_threads_per_block)
 __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
-        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* params_CUDA){
+        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* keySwitchingkey_CUDA,
+         uint64_t* params_CUDA, uint64_t fmod){
     
     /* GPU Parameters Set */
     cg::grid_group grid = cg::this_grid();
@@ -321,7 +322,8 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
 template<class FFT, class IFFT>
 __launch_bounds__(FFT::max_threads_per_block)
 __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA, Complex_d* dct_CUDA, uint64_t* a_CUDA, 
-        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* params_CUDA, uint32_t syncNum){
+        Complex_d* monomial_CUDA, Complex_d* twiddleTable_CUDA, Complex_d* GINX_bootstrappingKey_CUDA, uint64_t* keySwitchingkey_CUDA,
+         uint64_t* params_CUDA, uint64_t fmod, uint32_t syncNum){
     
     /* GPU Parameters Set */
     uint32_t tid = ThisThreadRankInBlock();
@@ -600,8 +602,7 @@ __global__ void cuFFTDxFWD(Complex_d* data, Complex_d* twiddleTable_CUDA){
     }
 }
 
-void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> bootstrappingKey_FFT, 
-    const std::shared_ptr<RingGSWCryptoParams> RGSWParams, LWESwitchingKey keySwitchingKey, const std::shared_ptr<LWECryptoParams> LWEParams)
+void GPUSetup(const std::shared_ptr<BinFHECryptoParams> params, RingGSWACCKey BSkey, LWESwitchingKey KSkey)
 {
     /* Setting up available GPU INFO */
     int deviceCount;
@@ -638,6 +639,7 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
     }
 
     /* Parameters Set */
+    auto RGSWParams     = params->GetRingGSWParams();
     uint32_t NHalf      = RGSWParams->GetN() >> 1;
     uint32_t arch       = gpuInfoList[0].major * 100 + gpuInfoList[0].minor * 10;
 
@@ -646,16 +648,16 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
         case 700: // V100
             switch (NHalf){
                 case 512:
-                    GPUSetup_core<700, 512>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<700, 512>(params, BSkey, KSkey);
                     break;
                 case 1024:
-                    GPUSetup_core<700, 1024>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<700, 1024>(params, BSkey, KSkey);
                     break;
                 case 2048:
-                    GPUSetup_core<700, 2048>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<700, 2048>(params, BSkey, KSkey);
                     break;
                 case 4096:
-                    GPUSetup_core<700, 4096>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<700, 4096>(params, BSkey, KSkey);
                     break;
                 default:
                     std::cerr << "Unsupported N, we support N = 1024, 2048, 4096, 8192\n";
@@ -665,16 +667,16 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
         case 800: // A100
             switch (NHalf){
                 case 512:
-                    GPUSetup_core<800, 512>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<800, 512>(params, BSkey, KSkey);
                     break;
                 case 1024:
-                    GPUSetup_core<800, 1024>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<800, 1024>(params, BSkey, KSkey);
                     break;
                 case 2048:
-                    GPUSetup_core<800, 2048>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<800, 2048>(params, BSkey, KSkey);
                     break;
                 case 4096:
-                    GPUSetup_core<800, 4096>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<800, 4096>(params, BSkey, KSkey);
                     break;
                 default:
                     std::cerr << "Unsupported N, we support N = 1024, 2048, 4096, 8192\n";
@@ -684,16 +686,16 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
         case 860: // RTX30 series
             switch (NHalf){
                 case 512:
-                    GPUSetup_core<860, 512>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<860, 512>(params, BSkey, KSkey);
                     break;
                 case 1024:
-                    GPUSetup_core<860, 1024>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<860, 1024>(params, BSkey, KSkey);
                     break;
                 case 2048:
-                    GPUSetup_core<860, 2048>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<860, 2048>(params, BSkey, KSkey);
                     break;
                 case 4096:
-                    GPUSetup_core<860, 4096>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<860, 4096>(params, BSkey, KSkey);
                     break;
                 default:
                     std::cerr << "Unsupported N, we support N = 1024, 2048, 4096, 8192\n";
@@ -703,16 +705,16 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
         case 890: // RTX40 series
             switch (NHalf){
                 case 512:
-                    GPUSetup_core<890, 512>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<890, 512>(params, BSkey, KSkey);
                     break;
                 case 1024:
-                    GPUSetup_core<890, 1024>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<890, 1024>(params, BSkey, KSkey);
                     break;
                 case 2048:
-                    GPUSetup_core<890, 2048>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<890, 2048>(params, BSkey, KSkey);
                     break;
                 case 4096:
-                    GPUSetup_core<890, 4096>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<890, 4096>(params, BSkey, KSkey);
                     break;
                 default:
                     std::cerr << "Unsupported N, we support N = 1024, 2048, 4096, 8192\n";
@@ -722,16 +724,16 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
         case 900: // H100
             switch (NHalf){
                 case 512:
-                    GPUSetup_core<900, 512>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<900, 512>(params, BSkey, KSkey);
                     break;
                 case 1024:
-                    GPUSetup_core<900, 1024>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<900, 1024>(params, BSkey, KSkey);
                     break;
                 case 2048:
-                    GPUSetup_core<900, 2048>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<900, 2048>(params, BSkey, KSkey);
                     break;
                 case 4096:
-                    GPUSetup_core<900, 4096>(bootstrappingKey_FFT, RGSWParams, keySwitchingKey, LWEParams);
+                    GPUSetup_core<900, 4096>(params, BSkey, KSkey);
                     break;
                 default:
                     std::cerr << "Unsupported N, we support N = 1024, 2048, 4096, 8192\n";
@@ -745,10 +747,11 @@ void GPUSetup(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_pt
 }
 
 template<uint32_t arch, uint32_t FFT_dimension>
-void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>> bootstrappingKey_FFT, 
-    const std::shared_ptr<RingGSWCryptoParams> RGSWParams, LWESwitchingKey keySwitchingKey, const std::shared_ptr<LWECryptoParams> LWEParams)
+void GPUSetup_core(const std::shared_ptr<BinFHECryptoParams> params, RingGSWACCKey BSkey, LWESwitchingKey KSkey)
 {
     /* HE Parameters Set */
+    auto RGSWParams             = params->GetRingGSWParams();
+    auto LWEParams              = params->GetLWEParams();
     NativeInteger Q             = RGSWParams->GetQ();
     NativeInteger QHalf         = Q >> 1;
     int64_t Q_int               = Q.ConvertToInt();
@@ -791,6 +794,20 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     parameters[8] = digitCountKS;
 
     /* Initialize bootstrapping key */
+    // construct bootstrapping key for FFT-based accumulator
+    auto bootstrappingKey_FFT = std::make_shared<std::vector<std::vector<std::vector<std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>>>>>>();
+    (*bootstrappingKey_FFT).resize(1);
+    for (size_t i = 0; i < 1; ++i) {
+        (*bootstrappingKey_FFT)[i].resize(2);
+        for (size_t j = 0; j < 2; ++j) {
+            (*bootstrappingKey_FFT)[i][j].resize(n);
+        }
+    }
+    for (size_t i = 0; i < n; ++i) {
+        (*bootstrappingKey_FFT)[0][0][i] = KeyCopy_FFT(RGSWParams, (*BSkey)[0][0][i]);
+        (*bootstrappingKey_FFT)[0][1][i] = KeyCopy_FFT(RGSWParams, (*BSkey)[0][1][i]);
+    }
+    // serialize bootstrapping key into host memory
     Complex *bootstrappingKey_host;
     cudaMallocHost((void**)&bootstrappingKey_host, 2 * n * RGSW_size * sizeof(Complex)); // ternery needs two secret keys
     for(int num_key = 0; num_key < 2; num_key++){
@@ -815,10 +832,10 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
             for(int k = 0; k < digitCountKS; k++){
                 for(int l = 0; l < n; l++){
                     keySwitchingkey_host[i*baseKS*digitCountKS*(n + 1) + j*digitCountKS*(n + 1) + k*(n + 1) + l] 
-                        = static_cast<uint64_t>(keySwitchingKey->GetElementsA()[i][j][k][l].ConvertToInt());
+                        = static_cast<uint64_t>(KSkey->GetElementsA()[i][j][k][l].ConvertToInt());
                 }
                 keySwitchingkey_host[i*baseKS*digitCountKS*(n + 1) + j*digitCountKS*(n + 1) + k*(n + 1) + n] 
-                    = static_cast<uint64_t>(keySwitchingKey->GetElementsB()[i][j][k].ConvertToInt());
+                    = static_cast<uint64_t>(KSkey->GetElementsB()[i][j][k].ConvertToInt());
             }
         }
     }
@@ -933,10 +950,44 @@ void GPUSetup_core(std::shared_ptr<std::vector<std::vector<std::vector<std::shar
     cudaFreeHost(monomial_arr);
 }
 
-void AddToAccCGGI_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
+std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> KeyCopy_FFT(const std::shared_ptr<RingGSWCryptoParams> params, 
+    RingGSWEvalKey ek){
+
+    NativeInteger Q   = params->GetQ();
+    NativeInteger QHalf = Q >> 1;
+    NativeInteger::SignedNativeInt Q_int = Q.ConvertToInt();
+    uint32_t digitsG  = params->GetDigitsG();
+    uint32_t digitsG2 = digitsG << 1;
+    uint32_t N        = params->GetN();
+
+    auto ek_d = std::make_shared<std::vector<std::vector<std::vector<Complex>>>>
+        (digitsG2, std::vector<std::vector<Complex>>(2, std::vector<Complex>(N, Complex(0.0, 0.0))));
+
+    for (size_t j = 0; j < digitsG2; ++j) {
+        for (size_t k = 0; k < 2; ++k) {
+            NativePoly ek_t = (*ek)[j][k];
+            ek_t.SetFormat(Format::COEFFICIENT);
+            for (size_t l = 0; l < N; ++l) {
+                NativeInteger::SignedNativeInt d = (ek_t[l] < QHalf) ? ek_t[l].ConvertToInt() : (ek_t[l].ConvertToInt() - Q_int);
+                (*ek_d)[j][k][l].real(static_cast<BasicFloat>(d));
+            }
+        }
+    }
+
+    // transform to evaluation domain
+    for (size_t i = 0; i < digitsG2; ++i) {
+        for (size_t j = 0; j < 2; ++j) {
+            DiscreteFourierTransform::NegacyclicForwardTransform((*ek_d)[i][j]);
+        }
+    }
+
+    return ek_d;
+}
+
+void EvalAcc_CUDA(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
         std::shared_ptr<std::vector<RLWECiphertext>> acc, uint64_t fmod)
 {   
-    std::string mode = "MULTI";
+    std::string mode = "SINGLE";
 
     /* Parameters Set */
     uint32_t N            = params->GetN();
@@ -1368,7 +1419,8 @@ void AddToAccCGGI_CUDA_single(const std::shared_ptr<RingGSWCryptoParams> params,
         cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
         bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size, GPUVec[currentGPU].streams[s % SM_count]>>>
             (GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].ct_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].dct_CUDA + (s % SM_count)*digitsG2*NHalf,
-                GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, GPUVec[currentGPU].monomial_CUDA, GPUVec[currentGPU].twiddleTable_CUDA, GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, GPUVec[currentGPU].params_CUDA, syncNum);
+                GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, GPUVec[currentGPU].monomial_CUDA, GPUVec[currentGPU].twiddleTable_CUDA, GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, 
+                GPUVec[currentGPU].keySwitchingkey_CUDA, GPUVec[currentGPU].params_CUDA, fmod, syncNum);
         cudaMemcpyAsync(acc_d_arr + s*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
     }
 
@@ -1490,7 +1542,8 @@ void AddToAccCGGI_CUDA_multi(const std::shared_ptr<RingGSWCryptoParams> params, 
         cudaMemcpyAsync(GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
         cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
         void *kernelArgs[] = {(void *)&acc_CUDA_offset, (void *)&ct_CUDA_offset, (void *)&dct_CUDA_offset, (void *)&a_CUDA_offset, 
-            (void *)&GPUVec[currentGPU].monomial_CUDA, (void *)&GPUVec[currentGPU].twiddleTable_CUDA, (void *)&GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, (void *)&GPUVec[currentGPU].params_CUDA};
+            (void *)&GPUVec[currentGPU].monomial_CUDA, (void *)&GPUVec[currentGPU].twiddleTable_CUDA, (void *)&GPUVec[currentGPU].GINX_bootstrappingKey_CUDA,
+                (void *)&GPUVec[currentGPU].keySwitchingkey_CUDA, (void *)&GPUVec[currentGPU].params_CUDA, (void *)&fmod};
         cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT, IFFT>), digitsG2/2, FFT::block_dim, 
             kernelArgs, FFT::shared_memory_size, GPUVec[currentGPU].streams[s % SM_count]);
         cudaMemcpyAsync(acc_d_arr + s*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
@@ -1529,173 +1582,6 @@ void AddToAccCGGI_CUDA_multi(const std::shared_ptr<RingGSWCryptoParams> params, 
     cudaFreeHost(a_arr);
     cudaFreeHost(acc_d_arr);
 }
-
-// template<uint32_t arch, uint32_t FFT_dimension, uint32_t FFT_num>
-// void AddToAccCGGI_CUDA_core(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<NativeVector>& a, 
-//         std::shared_ptr<std::vector<RLWECiphertext>> acc, std::string mode)
-// {   
-//     /* HE parameters set */
-//     auto mod                = a[0].GetModulus();
-//     uint32_t modInt         = mod.ConvertToInt();
-//     auto Q                  = params->GetQ();
-//     NativeInteger QHalf     = Q >> 1;
-//     int64_t Q_int           = Q.ConvertToInt();
-//     uint32_t N              = params->GetN();
-//     uint32_t NHalf          = N >> 1;
-//     uint32_t n              =  a[0].GetLength();
-//     uint32_t M              = 2 * params->GetN();
-//     uint32_t digitsG2       = params->GetDigitsG() << 1;
-//     auto polyParams         = params->GetPolyParams();
-
-//     int bootstrap_num       = acc->size();
-//     int GPU_num             = gpuInfoList.size();
-//     int SM_count            = gpuInfoList[0].multiprocessorCount;
-
-//     /* Configure cuFFTDx */
-//     using FFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() + cufftdx::ElementsPerThread<8>() +
-//                         cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<FFT_num>() + cufftdx::SM<arch>());
-
-//     using IFFT     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() + cufftdx::ElementsPerThread<8>() +
-//                             cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
-
-//     using FFT_multi      = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::forward>() +
-//                             cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
-
-//     using IFFT_multi     = decltype(cufftdx::Block() + cufftdx::Size<FFT_dimension>() + cufftdx::Type<cufftdx::fft_type::c2c>() + cufftdx::Direction<cufftdx::fft_direction::inverse>() +
-//                             cufftdx::Precision<double>() + cufftdx::FFTsPerBlock<2>() + cufftdx::SM<arch>());
-
-//     for(int g = 0; g < GPU_num; g++){
-//         /* Set device */
-//         cudaSetDevice(g);
-
-//         /* Increase max shared memory */
-//         auto it = sharedMemMap.find(arch);
-//         int maxSharedMemoryAvail = it->second * 1024;
-//         // Single block Bootstrapping shared memory size
-//         if(FFT::shared_memory_size < maxSharedMemoryAvail){
-//             CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingSingleBlock<FFT, IFFT>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT::shared_memory_size));
-//         }
-//         // Multi block Bootstrapping shared memory size
-//         if(FFT_multi::shared_memory_size < maxSharedMemoryAvail){
-//             CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(bootstrappingMultiBlock<FFT_multi, IFFT_multi>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_multi::shared_memory_size));
-//         }
-//     }
-
-//     /* Check whether block size exceeds cuda limitation */
-//     if(mode == "SINGLE"){
-//         if((NHalf / FFT::elements_per_thread * digitsG2) > gpuInfoList[0].maxThreadsPerBlock){
-//             std::cerr << "Exceed Maximum blocks per threads (" << gpuInfoList[0].maxThreadsPerBlock << ")\n";
-//             std::cerr << "Using " << (NHalf / FFT::elements_per_thread * digitsG2) << " threads" << ")\n";
-//             std::cerr << "NHalf: " << NHalf << "FFT::elements_per_thread: " << FFT::elements_per_thread << "digitsG2: " << digitsG2 << ")\n";
-//             exit(1);
-//         }
-//     }
-//     else if(mode == "MULTI"){
-//         if((NHalf / FFT_multi::elements_per_thread * 2) > gpuInfoList[0].maxThreadsPerBlock){
-//             std::cerr << "Exceed Maximum blocks per threads (" << gpuInfoList[0].maxThreadsPerBlock << ")\n";
-//             std::cerr << "Using " << (NHalf / FFT_multi::elements_per_thread * digitsG2) << " threads" << ")\n";
-//             std::cerr << "NHalf: " << NHalf << "FFT::elements_per_thread: " << FFT_multi::elements_per_thread << ")\n";
-//             exit(1);
-//         }
-//     }
-
-//     /* Initialize a_arr */
-//     uint64_t* a_arr;
-//     cudaMallocHost((void**)&a_arr, bootstrap_num * n * sizeof(uint64_t));
-//     for (int s = 0; s < bootstrap_num; s++)
-//         for (size_t i = 0; i < n; ++i)
-//             a_arr[s*n + i] = (mod.ModSub(a[s][i], mod) * (M / modInt)).ConvertToInt();
-
-//     /* Initialize acc_d_arr */
-//     Complex* acc_d_arr;
-//     cudaMallocHost((void**)&acc_d_arr, bootstrap_num * 2 * NHalf * sizeof(Complex));
-//     for (int s = 0; s < bootstrap_num; s++){
-//         for(int i = 0; i < 2; i++){
-//             NativePoly& acc_t((*acc)[s]->GetElements()[i]);
-//             for(int j = 0; j < NHalf; j++){
-//                 acc_d_arr[s*2*NHalf + i*NHalf + j] = Complex(static_cast<double>(acc_t[j].ConvertToInt()), static_cast<double>(acc_t[j + NHalf].ConvertToInt()));
-//             }
-//         }
-//     }
-
-//     auto start = std::chrono::high_resolution_clock::now();
-
-//     if(mode == "SINGLE"){
-//         uint32_t syncNum;
-//         auto it = synchronizationMap.find({arch, FFT_dimension});
-//         if (it != synchronizationMap.end() && it->second != 0) {
-//             syncNum = it->second;
-//         } else {
-//             std::cerr << "Hasn't tested on this GPU or N yet, please contact r11922138@ntu.edu.tw" << std::endl;
-//             exit(1);
-//         }
-//         for (int s = 0; s < bootstrap_num; s++) {
-//             int currentGPU = (s / SM_count) % GPU_num;
-//             if(s % SM_count == 0){
-//                 cudaSetDevice(currentGPU);
-//             }
-//             cudaMemcpyAsync(GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
-//             cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
-//             bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size, GPUVec[currentGPU].streams[s % SM_count]>>>
-//                 (GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].ct_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].dct_CUDA + (s % SM_count)*digitsG2*NHalf,
-//                     GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, GPUVec[currentGPU].monomial_CUDA, GPUVec[currentGPU].twiddleTable_CUDA, GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, GPUVec[currentGPU].params_CUDA, syncNum);
-//             cudaMemcpyAsync(acc_d_arr + s*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
-//         }
-//     }
-//     else if(mode == "MULTI"){
-//         Complex_d* acc_CUDA_offset, *ct_CUDA_offset, *dct_CUDA_offset;
-//         uint64_t* a_CUDA_offset;
-//         for (int s = 0; s < bootstrap_num; s++) {
-//             int currentGPU = (s / SM_count) % GPU_num;
-//             if(s % SM_count == 0){
-//                 cudaSetDevice(currentGPU);
-//             }
-//             acc_CUDA_offset = GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf;
-//             ct_CUDA_offset = GPUVec[currentGPU].ct_CUDA + (s % SM_count)*2*NHalf;
-//             dct_CUDA_offset = GPUVec[currentGPU].dct_CUDA + (s % SM_count)*digitsG2*NHalf;
-//             a_CUDA_offset = GPUVec[currentGPU].a_CUDA + (s % SM_count)*n;
-//             cudaMemcpyAsync(GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
-//             cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
-//             void *kernelArgs[] = {(void *)&acc_CUDA_offset, (void *)&ct_CUDA_offset, (void *)&dct_CUDA_offset, (void *)&a_CUDA_offset, 
-//                 (void *)&GPUVec[currentGPU].monomial_CUDA, (void *)&GPUVec[currentGPU].twiddleTable_CUDA, (void *)&GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, (void *)&GPUVec[currentGPU].params_CUDA};
-//             cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT_multi, IFFT_multi>), digitsG2/2, FFT_multi::block_dim, 
-//                 kernelArgs, FFT_multi::shared_memory_size, GPUVec[currentGPU].streams[s % SM_count]);
-//             cudaMemcpyAsync(acc_d_arr + s*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
-//         }
-//     }
-
-//     /* Synchronize all GPUs */
-//     for(int g = 0; g < GPU_num; g++){
-//         cudaSetDevice(g);
-//         CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
-//         CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
-//     }
-//     auto end = std::chrono::high_resolution_clock::now();
-//     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
-//     std::cout << bootstrap_num << "AddToAccCGGI_CUDA_core GPU time : " << elapsed.count() << " ms" << std::endl;
-
-//     /* cast acc_d_arr back to NativePoly */
-//     for (int s = 0; s < bootstrap_num; s++) {
-//         NativeVector ret0(N, Q), ret1(N, Q);
-//         for(int i = 0; i < NHalf; i++){
-//             ret0[i] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + i].real());
-//             ret0[i + NHalf] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + i].imag());
-//             ret1[i] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + NHalf + i].real());
-//             ret1[i + NHalf] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + NHalf + i].imag());
-//         }
-//         std::vector<NativePoly> res(2);
-//         res[0] = NativePoly(polyParams, Format::COEFFICIENT, false);
-//         res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
-//         res[0].SetValues(std::move(ret0), Format::COEFFICIENT);
-//         res[1].SetValues(std::move(ret1), Format::COEFFICIENT);
-
-//         (*acc)[s] = std::make_shared<RLWECiphertextImpl>(std::move(res));
-//     }
-
-//     /* Free memory */     
-//     cudaFreeHost(a_arr);
-//     cudaFreeHost(acc_d_arr);
-// }
 
 void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ctExt, NativeInteger fmod)
 {
@@ -1788,3 +1674,51 @@ void MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_p
 //     for(uint32_t j = 0; j < (N >> 1); j++)
 //         outputFile << "(" << dct_arr[i*(N >> 1) + j].real() << ", " << dct_arr[i*(N >> 1) + j].imag() << ")" << std::endl;
 // outputFile.close();
+
+ // if(fmod){
+//     const uint64_t qKS          = params_CUDA[6];
+//     const uint32_t baseKS       = static_cast<uint32_t>(params_CUDA[7]);
+//     const uint32_t digitCountKS = static_cast<uint32_t>(params_CUDA[8]);
+    
+//     /* Copy acc_CUDA to shared_mem */
+//     for(uint32_t i = tid; i <= NHalf; i += bdim){
+//         shared_mem[i] = complex_type {acc_CUDA[i].x, acc_CUDA[i].y};
+//     }
+//     __syncthreads();
+
+//     /* First Modswitch */
+//     // a
+//     for (size_t i = tid; i < NHalf; i += bdim){
+//         shared_mem[i].x = RoundqQ_CUDA(shared_mem[i].x, qKS, Q);
+//         shared_mem[i].y = RoundqQ_CUDA(shared_mem[i].y, qKS, Q);
+//     }
+//     // b
+//     shared_mem[NHalf].x = RoundqQ_CUDA(shared_mem[NHalf].x, qKS, Q);
+//     __syncthreads();
+
+//     /* KeySwitch */
+//     uint64_t temp;
+//     for (uint32_t k = tid; k <= n; k += bdim){
+//         if (k == n) temp = static_cast<uint64_t>(shared_mem[NHalf].x); // b
+//         else temp = 0; // a
+//         for (uint32_t i = 0; i < N; ++i) {
+//             uint64_t atmp;
+//             if(i < NHalf) atmp = shared_mem[i].x;
+//             else atmp = shared_mem[i - NHalf].y;
+//             for (uint32_t j = 0; j < digitCountKS; ++j, atmp /= baseKS) {
+//                 uint64_t a0 = (atmp % baseKS);
+//                 ModSubFastEq_CUDA(temp, keySwitchingkey_CUDA[i*baseKS*digitCountKS*(n + 1) + a0*digitCountKS*(n + 1) + j*(n + 1) + k], qKS);
+//             }
+//         }
+//         if(k < NHalf) acc_CUDA[k].x = static_cast<double>(temp);
+//         else acc_CUDA[k - NHalf].y = static_cast<double>(temp);
+//     }
+//     __syncthreads();
+
+//     /* Second Modswitch */
+//     for (size_t i = tid; i <= n; i += bdim){
+//         if(i < NHalf) acc_CUDA[i].x = RoundqQ_CUDA(acc_CUDA[i].x, fmod, qKS);
+//         else acc_CUDA[i - NHalf].y = RoundqQ_CUDA(acc_CUDA[i - NHalf].y, fmod, qKS);
+//     }
+//     __syncthreads();
+// }

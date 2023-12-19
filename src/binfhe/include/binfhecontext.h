@@ -334,6 +334,10 @@ public:
         return 128;
     }
 
+    /**************************************************************************************************************************************
+    *  GPU Functions
+    ***************************************************************************************************************************************/
+
     /**
    * Evaluate an arbitrary function
    *
@@ -352,6 +356,11 @@ public:
    * @return a shared pointer to the resulting ciphertext
    */
     std::vector<LWECiphertext> EvalBinGate(BINGATE gate, const std::vector<LWECiphertext>& ct1, const std::vector<LWECiphertext>& ct2) const;
+
+    /**
+   * Setup GPU for bootstrapping
+   */
+    void GPUSetupp() const;
 
 private:
     // Shared pointer to Ring GSW + LWE parameters

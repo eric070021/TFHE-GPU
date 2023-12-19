@@ -305,7 +305,7 @@ std::vector<NativeInteger> BinFHEContext::GenerateLUTviaFunction(NativeInteger (
 }
 
 /**************************************************************************************************************************************
-*  Vector version of the above functions
+*  GPU Functions
 ***************************************************************************************************************************************/
 
 std::vector<LWECiphertext> BinFHEContext::EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const {
@@ -315,6 +315,14 @@ std::vector<LWECiphertext> BinFHEContext::EvalFunc(const std::vector<LWECipherte
 
 std::vector<LWECiphertext> BinFHEContext::EvalBinGate(BINGATE gate, const std::vector<LWECiphertext>& ct1, const std::vector<LWECiphertext>& ct2) const{
     return (*m_binfhescheme->EvalBinGate(m_params, gate, m_BTKey, ct1, ct2));
+}
+
+void BinFHEContext::GPUSetupp() const{
+    if(m_BTKey.BSkey == 0 || m_BTKey.KSkey == 0) {
+        std::string errMsg("ERROR: Need to call BTKeyGen before calling GPUSetup");
+        OPENFHE_THROW(openfhe_error, errMsg);
+    }
+    GPUSetup(m_params, m_BTKey.BSkey, m_BTKey.KSkey); 
 }
 
 }  // namespace lbcrypto

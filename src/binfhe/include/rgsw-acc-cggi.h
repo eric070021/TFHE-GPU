@@ -71,26 +71,6 @@ public:
     void EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, RLWECiphertext& acc,
                  const NativeVector& a, std::string mode = "NTT", uint64_t fmod = 0) const override;
 
-    /**
-   * Main accumulator function used in vector bootstrappings - AP variant
-   *
-   * @param params a shared pointer to RingGSW scheme parameters
-   * @param &input input vector of ciphertexts
-   * @param acc previous value of the accumulators
-   */
-    void EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, std::shared_ptr<std::vector<RLWECiphertext>> acc,
-                 const std::vector<NativeVector>& a, uint64_t fmod = 0) const override;
-    
-    /**
-   * Modswitch, Keyswitch, and Modswitch combo used after EvalAcc
-   *
-   * @param params a shared pointer to LWECryptoParams scheme parameters
-   * @param &input input vector of ciphertexts
-   * @param Q1 First modulus to switch to
-   * @param Q2 Second modulus to switch to
-   */
-    void MKMSwitch(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ct, NativeInteger fmod) const override;
-
 private:
     RingGSWEvalKey KeyGenCGGI(const std::shared_ptr<RingGSWCryptoParams> params, const NativePoly& skNTT,
                               const LWEPlaintext& m) const;

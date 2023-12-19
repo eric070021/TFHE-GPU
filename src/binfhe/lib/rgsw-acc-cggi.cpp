@@ -199,7 +199,7 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
         auto acc_vec = std::make_shared<std::vector<RLWECiphertext>> (1, acc);
 
         // Blind rotate
-        AddToAccCGGI_CUDA(params, a_vec, acc_vec, fmod);
+        EvalAcc_CUDA(params, a_vec, acc_vec, fmod);
 
         acc = (*acc_vec)[0];
     }
@@ -207,17 +207,6 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
         std::string errMsg = "ERROR: Transform mode not supported.";
         OPENFHE_THROW(not_implemented_error, errMsg);
     }
-}
-
-void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> params, const RingGSWACCKey ek, 
-        std::shared_ptr<std::vector<RLWECiphertext>> acc, const std::vector<NativeVector>& a, uint64_t fmod) const {
-    AddToAccCGGI_CUDA(params, a, acc, fmod);
-}
-
-
-void RingGSWAccumulatorCGGI::MKMSwitch(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ctExt,
-                         NativeInteger fmod) const{
-    MKMSwitch_CUDA(params, ctExt, fmod);
 }
 
 // Encryption for the CGGI variant, as described in https://eprint.iacr.org/2020/086
