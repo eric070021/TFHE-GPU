@@ -37,7 +37,7 @@ To build the project, follow these steps:
 1. Clone the repository to your local machine:
 
 ```bash
-   git clone https://github.com/yourusername/openFHE-GPU.git
+   git clone https://github.com/eric070021/openFHE-GPU.git
    cd openFHE-GPU
 ```
 2. Create a release build:
