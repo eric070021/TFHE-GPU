@@ -949,7 +949,8 @@ void GPUFFTBootstrap::GPUSetup_core(const std::shared_ptr<BinFHECryptoParams> pa
         cudaMalloc(&GPUVec[g].a_CUDA, SM_count * n * sizeof(uint64_t));
 
         /* Allocate ctExt_CUDA on GPU */
-        cudaMalloc(&GPUVec[g].ctExt_CUDA, SM_count * (N + 1) * sizeof(uint64_t));
+        uint32_t max_n_N = n > N ? n : N;
+        cudaMalloc(&GPUVec[g].ctExt_CUDA, SM_count * (max_n_N + 1) * sizeof(uint64_t));
     }
 
     /* Synchronize all GPUs */
@@ -1683,20 +1684,22 @@ void GPUFFTBootstrap::MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> para
     /* HE parameters set */
     uint32_t n              = params->Getn();
     uint32_t N              = params->GetN();
-    
-    int bootstrap_num = ctExt->size();
+    uint32_t max_n_N        = n > N ? n : N;
+
+    /* GPU settings */
+    int bootstrap_num       = ctExt->size();
     int GPU_num             = gpuInfoList.size();
-    int SM_count = gpuInfoList[0].multiprocessorCount;
+    int SM_count            = gpuInfoList[0].multiprocessorCount;
 
     /* Initialize ctExt_host */
     uint64_t* ctExt_host;
-    cudaMallocHost((void**)&ctExt_host, bootstrap_num * (N + 1) * sizeof(uint64_t));
+    cudaMallocHost((void**)&ctExt_host, bootstrap_num * (max_n_N + 1) * sizeof(uint64_t));
     for (int s = 0; s < bootstrap_num; s++){
         // A
         for(int i = 0; i < N; i++)
-            ctExt_host[s*(N + 1) + i] = static_cast<uint64_t>((*ctExt)[s]->GetA()[i].ConvertToInt());
+            ctExt_host[s*(max_n_N + 1) + i] = static_cast<uint64_t>((*ctExt)[s]->GetA()[i].ConvertToInt());
         // B
-        ctExt_host[s*(N + 1) + N] = static_cast<uint64_t>((*ctExt)[s]->GetB().ConvertToInt());
+        ctExt_host[s*(max_n_N + 1) + N] = static_cast<uint64_t>((*ctExt)[s]->GetB().ConvertToInt());
     }
 
     auto start = std::chrono::high_resolution_clock::now();
@@ -1706,10 +1709,10 @@ void GPUFFTBootstrap::MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> para
         if(s % SM_count == 0){
             cudaSetDevice(currentGPU);
         }
-        cudaMemcpyAsync(GPUVec[currentGPU].ctExt_CUDA + (s % SM_count)*(N + 1), ctExt_host + s*(N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+        cudaMemcpyAsync(GPUVec[currentGPU].ctExt_CUDA + (s % SM_count)*(max_n_N + 1), ctExt_host + s*(max_n_N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
         MKMSwitchKernel<<<1, 768, (N + 1) * sizeof(uint64_t), GPUVec[currentGPU].streams[s % SM_count]>>>
-            (GPUVec[currentGPU].ctExt_CUDA + (s % SM_count)*(N + 1), GPUVec[currentGPU].keySwitchingkey_CUDA, GPUVec[currentGPU].params_CUDA, static_cast<uint64_t>(fmod.ConvertToInt()));
-        cudaMemcpyAsync(ctExt_host + s*(N + 1), GPUVec[currentGPU].ctExt_CUDA + (s % SM_count)*(N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
+            (GPUVec[currentGPU].ctExt_CUDA + (s % SM_count)*(max_n_N + 1), GPUVec[currentGPU].keySwitchingkey_CUDA, GPUVec[currentGPU].params_CUDA, static_cast<uint64_t>(fmod.ConvertToInt()));
+        cudaMemcpyAsync(ctExt_host + s*(max_n_N + 1), GPUVec[currentGPU].ctExt_CUDA + (s % SM_count)*(max_n_N + 1), (n + 1) * sizeof(uint64_t), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
     }
 
     /* Synchronize all GPUs */
@@ -1728,9 +1731,9 @@ void GPUFFTBootstrap::MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> para
         // A
         NativeVector a(n, fmod);
         for(int i = 0; i < n; i++)
-            a[i] = ctExt_host[s*(N + 1) + i];
+            a[i] = ctExt_host[s*(max_n_N + 1) + i];
         // B
-        NativeInteger b (ctExt_host[s*(N + 1) + n]);
+        NativeInteger b (ctExt_host[s*(max_n_N + 1) + n]);
 
         (*ctExt)[s] = std::make_shared<LWECiphertextImpl>(LWECiphertextImpl(std::move(a), b));
     }

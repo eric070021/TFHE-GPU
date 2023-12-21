@@ -317,6 +317,10 @@ std::vector<LWECiphertext> BinFHEContext::EvalBinGate(BINGATE gate, const std::v
     return (*m_binfhescheme->EvalBinGate(m_params, gate, m_BTKey, ct1, ct2));
 }
 
+std::vector<LWECiphertext> BinFHEContext::EvalFloor(const std::vector<LWECiphertext>& ct, uint32_t roundbits) const{
+    return (*m_binfhescheme->EvalFloor(m_params, m_BTKey, ct, GetBeta(), roundbits));
+}
+
 void BinFHEContext::GPUSetup() const{
     if(m_timeOptimization){
         std::string errMsg("ERROR: Time optimization is not supported in GPU");

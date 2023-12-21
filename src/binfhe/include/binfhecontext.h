@@ -357,6 +357,15 @@ public:
    */
     std::vector<LWECiphertext> EvalBinGate(BINGATE gate, const std::vector<LWECiphertext>& ct1, const std::vector<LWECiphertext>& ct2) const;
 
+     /**
+   * Evaluate a round down function
+   *
+   * @param &ct1 vector of ciphertexts to be bootstrapped
+   * @param roundbits number of bits to be rounded
+   * @return a shared pointer to the resulting ciphertext
+   */
+    std::vector<LWECiphertext> EvalFloor(const std::vector<LWECiphertext>& ct, uint32_t roundbits = 0) const;
+
     void GPUSetup() const;
 
     void GPUClean() const;

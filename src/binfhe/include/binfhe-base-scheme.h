@@ -185,7 +185,7 @@ public:
     *  GPU Functions
     ***************************************************************************************************************************************/
    
-     /**
+    /**
    * Evaluates a binary gate (calls bootstrapping as a subroutine)
    *
    * @param params a shared pointer to RingGSW scheme parameters
@@ -199,7 +199,7 @@ public:
     std::shared_ptr<std::vector<LWECiphertext>> EvalBinGate(const std::shared_ptr<BinFHECryptoParams> params, BINGATE gate, const RingGSWBTKey& EK,
                               const std::vector<LWECiphertext>& ct1, const std::vector<LWECiphertext>& ct2) const;
 
-     /**
+    /**
    * Evaluate an arbitrary function
    *
    * @param params a shared pointer to RingGSW scheme parameters
@@ -214,6 +214,20 @@ public:
     std::shared_ptr<std::vector<LWECiphertext>> EvalFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                            const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT,
                            const NativeInteger beta) const;
+    
+    /**
+   * Evaluate a round down function
+   *
+   * @param params a shared pointer to RingGSW scheme parameters
+   * @param &EK a shared pointer to the bootstrapping keys
+   * @param &ct1 vector of input ciphertexts
+   * @param lwescheme a shared pointer to additive LWE scheme
+   * @param beta the error bound
+   * @param bigger_q the ciphertext modulus
+   * @return a shared pointer to the resulting ciphertext
+   */
+    std::shared_ptr<std::vector<LWECiphertext>> EvalFloor(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
+                            const std::vector<LWECiphertext>& ct, const NativeInteger beta, uint32_t roundbits = 0) const;
 
 private:
     /**
@@ -291,7 +305,7 @@ private:
     std::shared_ptr<std::vector<RLWECiphertext>> BootstrapFuncCore(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWACCKey ek,
                                      const std::vector<LWECiphertext>& ct, const Func f, const NativeInteger fmod) const;
 
-   /**
+    /**
    * Bootstraps a fresh ciphertext
    *
    * @param params a shared pointer to RingGSW scheme parameters

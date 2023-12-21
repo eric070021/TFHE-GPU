@@ -786,6 +786,68 @@ std::shared_ptr<std::vector<LWECiphertext>> BinFHEScheme::EvalFunc(const std::sh
     return BootstrapFunc(params, EK, (*ct2), fLUT1, q);
 }
 
+std::shared_ptr<std::vector<LWECiphertext>> BinFHEScheme::EvalFloor(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
+                            const std::vector<LWECiphertext>& ct, const NativeInteger beta, uint32_t roundbits) const{
+    
+    if(ct.size() == 0){
+        std::string errMsg =
+            "ERROR: EvalFunc: input vector is empty";
+        OPENFHE_THROW(openfhe_error, errMsg);
+    }
+
+    auto& LWEParams   = params->GetLWEParams();
+    NativeInteger q   = roundbits == 0 ? LWEParams->Getq() : beta * 2 * (1 << roundbits);
+    NativeInteger mod = ct[0]->GetModulus();
+
+    // ct1: copy of the input ciphertexts (need to make it shared pointer because of return type)
+    auto ct1 = std::make_shared<std::vector<LWECiphertext>> (ct.size());
+    for (uint32_t count = 0; count < ct.size(); count++){
+        (*ct1)[count] = std::make_shared<LWECiphertextImpl>(*ct[count]);
+        LWEscheme->EvalAddConstEq((*ct1)[count], beta);
+    }
+
+    // ct1Modq: copy of the input ciphertexts
+    std::vector<LWECiphertext> ct1Modq(ct.size());
+    for (uint32_t count = 0; count < ct.size(); count++){
+        ct1Modq[count] = std::make_shared<LWECiphertextImpl>(*(*ct1)[count]);
+        ct1Modq[count]->SetModulus(q);
+    }
+
+    // this is 1/4q_small or -1/4q_small mod q
+    auto f1 = [](NativeInteger x, NativeInteger q, NativeInteger Q) -> NativeInteger {
+        if (x < q / 2)
+            return Q - q / 4;
+        else
+            return q / 4;
+    };
+    auto ct2 = BootstrapFunc(params, EK, ct1Modq, f1, mod);
+    for (uint32_t count = 0; count < ct.size(); count++){
+        LWEscheme->EvalSubEq((*ct1)[count], (*ct2)[count]);
+    }
+
+    // ct2Modq: copy of the input ciphertexts
+    std::vector<LWECiphertext> ct2Modq(ct.size());
+    for (uint32_t count = 0; count < ct.size(); count++){
+        ct2Modq[count] = std::make_shared<LWECiphertextImpl>(*(*ct1)[count]);
+        ct2Modq[count]->SetModulus(q);
+    }
+
+    // now the input is only within the range [0, q/2)
+    auto f2 = [](NativeInteger x, NativeInteger q, NativeInteger Q) -> NativeInteger {
+        if (x < q / 4)
+            return Q - q / 2 - x;
+        else if ((q / 4 <= x) && (x < 3 * q / 4))
+            return x;
+        else
+            return Q + q / 2 - x;
+    };
+    auto ct3 = BootstrapFunc(params, EK, ct2Modq, f2, mod);
+    for (uint32_t count = 0; count < ct.size(); count++){
+        LWEscheme->EvalSubEq((*ct1)[count], (*ct3)[count]);
+    }
+
+    return ct1;
+}
 
 std::shared_ptr<std::vector<RLWECiphertext>> BinFHEScheme::BootstrapGateCore(const std::shared_ptr<BinFHECryptoParams> params, BINGATE gate,
                                                const RingGSWACCKey ek, const std::vector<LWECiphertext>& ct) const {
