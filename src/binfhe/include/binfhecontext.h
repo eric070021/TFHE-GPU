@@ -372,7 +372,15 @@ public:
    * @param &ct1 vector of ciphertexts to be bootstrapped
    * @return a shared pointer to the resulting ciphertext
    */
-    std::vector<LWECiphertext> EvalSign(const std::vector<LWECiphertext>& ct);
+    std::vector<LWECiphertext> EvalSign(const std::vector<LWECiphertext>& ct) const;
+
+    /**
+   * Evaluate ciphertext decomposition
+   *
+   * @param &ct1 vector of ciphertexts to be bootstrapped
+   * @return a vector of shared pointers to the resulting ciphertexts
+   */
+    std::vector<std::vector<LWECiphertext>> EvalDecomp(const std::vector<LWECiphertext>& ct) const;
 
     void GPUSetup() const;
 

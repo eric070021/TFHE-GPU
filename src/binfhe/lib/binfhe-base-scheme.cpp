@@ -899,6 +899,54 @@ std::shared_ptr<std::vector<LWECiphertext>> BinFHEScheme::EvalSign(const std::sh
     return cttmp;
 }
 
+std::shared_ptr<std::vector<std::vector<LWECiphertext>>> BinFHEScheme::EvalDecomp(const std::shared_ptr<BinFHECryptoParams> params,
+                            const RingGSWBTKey& EK, const std::vector<LWECiphertext>& ct, const NativeInteger beta) const{
+    
+    if(ct.size() == 0){
+        std::string errMsg =
+            "ERROR: EvalFunc: input vector is empty";
+        OPENFHE_THROW(openfhe_error, errMsg);
+    }
+
+    auto mod         = ct[0]->GetModulus();
+    auto& LWEParams  = params->GetLWEParams();
+    auto& RGSWParams = params->GetRingGSWParams();
+
+    NativeInteger q = LWEParams->Getq();
+    if (mod <= q) {
+        std::string errMsg =
+            "ERROR: EvalDecomp is only for large precision. For small precision, please use bootstrapping directly";
+        OPENFHE_THROW(not_implemented_error, errMsg);
+    }
+
+    // cttmp: copy of the input ciphertexts
+    auto cttmp = std::make_shared<std::vector<LWECiphertext>> (ct.size());
+    for (uint32_t count = 0; count < ct.size(); count++){
+        (*cttmp)[count] = std::make_shared<LWECiphertextImpl>(*ct[count]);
+    }
+    // ret: return vector of vectors of ciphertexts
+    auto ret = std::make_shared<std::vector<std::vector<LWECiphertext>>> (ct.size());
+    while (mod > q) {
+        for (uint32_t count = 0; count < ct.size(); count++){
+            auto ctq = std::make_shared<LWECiphertextImpl>(*(*cttmp)[count]);
+            ctq->SetModulus(q);
+            (*ret)[count].push_back(std::move(ctq));
+        }
+
+        // Floor the input sequentially to obtain the most significant bit
+        cttmp = EvalFloor(params, EK, *cttmp, beta);
+        mod   = mod / q * 2 * beta;
+        // round Q to 2betaQ/q
+        for (uint32_t count = 0; count < ct.size(); count++){
+            (*cttmp)[count] = LWEscheme->ModSwitch(mod, (*cttmp)[count]);
+        }
+    }
+    for (uint32_t count = 0; count < ct.size(); count++){
+        (*ret)[count].push_back(std::move((*cttmp)[count]));
+    }
+    return ret;
+}
+
 std::shared_ptr<std::vector<RLWECiphertext>> BinFHEScheme::BootstrapGateCore(const std::shared_ptr<BinFHECryptoParams> params, BINGATE gate,
                                                const RingGSWACCKey ek, const std::vector<LWECiphertext>& ct) const {
     if (ek == nullptr) {

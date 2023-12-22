@@ -165,9 +165,9 @@ int main() {
     //     // warm up
     //     auto ct_cube_vec = cc.EvalFunc(ct_vec, lut);
         
-    //     // Get average of 10 runs
+    //     // Get average of 5 runs
     //     std::vector<double> times;
-    //     for(int i = 0; i < 10; i++){
+    //     for(int i = 0; i < 5; i++){
     //         auto start = std::chrono::high_resolution_clock::now();
     //         ct_cube_vec = cc.EvalFunc(ct_vec, lut);
     //         auto end = std::chrono::high_resolution_clock::now();
@@ -175,7 +175,7 @@ int main() {
     //         times.push_back(elapsed.count());
     //     }
        
-    //     std::cout << std::accumulate(times.begin(), times.end(), 0.0) / times.size() << ", ";
+    //     std::cout << std::accumulate(times.begin(), times.end(), 0.0) / times.size() << ", " << std::flush;
     // }
     
     // int failCount = 0;

@@ -83,7 +83,12 @@
         "valarray": "cpp",
         "variant": "cpp",
         "__locale": "cpp",
-        "target": "cpp"
+        "target": "cpp",
+        "__hash_table": "cpp",
+        "__split_buffer": "cpp",
+        "__tree": "cpp",
+        "queue": "cpp",
+        "stack": "cpp"
     },
     "cmake.configureOnOpen": false
 }

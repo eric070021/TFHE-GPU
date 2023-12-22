@@ -321,8 +321,12 @@ std::vector<LWECiphertext> BinFHEContext::EvalFloor(const std::vector<LWECiphert
     return (*m_binfhescheme->EvalFloor(m_params, m_BTKey, ct, GetBeta(), roundbits));
 }
 
-std::vector<LWECiphertext> BinFHEContext::EvalSign(const std::vector<LWECiphertext>& ct){
+std::vector<LWECiphertext> BinFHEContext::EvalSign(const std::vector<LWECiphertext>& ct) const{
     return (*m_binfhescheme->EvalSign(m_params, m_BTKey, ct, GetBeta()));
+}
+
+std::vector<std::vector<LWECiphertext>> BinFHEContext::EvalDecomp(const std::vector<LWECiphertext>& ct) const{
+    return (*m_binfhescheme->EvalDecomp(m_params, m_BTKey, ct, GetBeta()));
 }
 
 void BinFHEContext::GPUSetup() const{

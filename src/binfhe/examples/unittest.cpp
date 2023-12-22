@@ -154,11 +154,63 @@ void EvalSignTest(){
     cc.GPUClean();
 }
 
+void EvalDecompTest(){
+    std::cout << "EvalDecompTest Test: " << std::endl;
+
+    auto cc = BinFHEContext();
+    uint32_t logQ = 23;
+    cc.GenerateBinFHEContext(STD128, false, logQ, 0, GINX, false);
+    auto sk = cc.KeyGen();
+    cc.BTKeyGen(sk);
+    cc.GPUSetup();
+
+    uint32_t Q = 1 << logQ;
+
+    int q      = 4096;                                               // q
+    int factor = 1 << int(logQ - log2(q));                           // Q/q
+    uint64_t P = cc.GetMaxPlaintextSpace().ConvertToInt() * factor;  // Obtain the maximum plaintext space
+    
+    //uint64_t input = 8193;
+    std::vector<LWECiphertext> ct_vec;
+    for (int i = 0; i < 8; i++) {
+        auto ct1 = cc.Encrypt(sk, i % P, FRESH, P, Q);
+        ct_vec.push_back(ct1);
+    }
+
+    auto ct_decomp_vec = cc.EvalDecomp(ct_vec);
+
+    for (int i = 0; i < 8; i++) {
+        uint64_t p = cc.GetMaxPlaintextSpace().ConvertToInt();
+        std::cout << "Encrypted value: " << i % P;
+        std::cout << " Decomposed value: ";
+        for (size_t j = 0; j < ct_decomp_vec[i].size(); j++) {
+            auto ct_decomp = ct_decomp_vec[i][j];
+            LWEPlaintext result;
+            if (j == ct_decomp_vec[i].size() - 1) {
+                // after every evalfloor, the least significant digit is dropped so the last modulus is computed as log p = (log P) mod (log GetMaxPlaintextSpace)
+                auto logp = GetMSB(P - 1) % GetMSB(p - 1);
+                p         = 1 << logp;
+            }
+            cc.Decrypt(sk, ct_decomp, &result, p);
+            std::cout << "(" << result << " * " << cc.GetMaxPlaintextSpace() << "^" << j << ")";
+            if (j != ct_decomp_vec[i].size() - 1) {
+                std::cout << " + ";
+            }
+        }
+        std::cout << std::endl;
+    }
+
+    std::cout << "--------------------------------" << std::endl;
+
+    cc.GPUClean();
+}
+
 int main() {
     EvalFuncTest();
     EvalBinGateTest();
     EvalFloorTest();
     EvalSignTest();
+    EvalDecompTest();
 
     return 0;
 }

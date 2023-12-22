@@ -244,6 +244,21 @@ public:
                            const RingGSWBTKey& EK, const std::vector<LWECiphertext>& ct,
                            const NativeInteger beta) const;
 
+    /**
+   * Evaluate a degit decomposition process over a large precision LWE ciphertext
+   *
+   * @param params a shared pointer to RingGSW scheme parameters
+   * @param &EK a shared pointer to the bootstrapping keys
+   * @param &ct1 vector of input ciphertexts
+   * @param lwescheme a shared pointer to additive LWE scheme
+   * @param beta the error bound
+   * @param bigger_q the ciphertext modulus
+   * @return a shared pointer to the resulting ciphertext
+   */
+    std::shared_ptr<std::vector<std::vector<LWECiphertext>>> EvalDecomp(const std::shared_ptr<BinFHECryptoParams> params,
+                                          const RingGSWBTKey& EK, const std::vector<LWECiphertext>& ct,
+                                          const NativeInteger beta) const;
+
 private:
     /**
    * Core bootstrapping operation
