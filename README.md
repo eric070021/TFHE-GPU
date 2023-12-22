@@ -13,8 +13,11 @@ A high-performance library that leverages GPU acceleration to boost the TFHE (Fu
 - [Supported APIs](#supported-apis)
   - [GPU Setup](#gpu-setup)
   - [GPU Clean](#gpu-clean)
-  - [EvalFunc](#evalfunc)
   - [EvalBinGate](#evalbingate)
+  - [EvalFunc](#evalfunc)
+  - [EvalFloor](#evalfloor)
+  - [EvalSign](#evalsign)
+  - [EvalDecomp](#evaldecomp)
 - [Sample Program](#sample-program)
 
 ## Introduction
@@ -66,16 +69,6 @@ Call this api at the end of the program.
 cc.GPUClean();
 ```
 
-### EvalFunc
-- **Input**:
-  - Vector of LWECiphertext
-  - LookUpTable
-- **Output**:
-  - Vector of LWECiphertext
-```cpp
-std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT);
-```
-
 ### EvalBinGate
 - **Input**:
   - Gate you want to evaluate
@@ -85,6 +78,44 @@ std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const 
   - Vector of LWECiphertext
 ```cpp
 std::vector<LWECiphertext> EvalBinGate(BINGATE gate, const std::vector<LWECiphertext>& ct1, const std::vector<LWECiphertext>& ct2) const;
+```
+
+### EvalFunc
+- **Input**:
+  - Vector of LWECiphertext
+  - LookUpTable
+- **Output**:
+  - Vector of LWECiphertext
+```cpp
+std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const;
+```
+
+### EvalFloor
+- **Input**:
+  - Vector of LWECiphertext
+  - Round bits
+- **Output**:
+  - Vector of LWECiphertext
+```cpp
+std::vector<LWECiphertext> EvalFloor(const std::vector<LWECiphertext>& ct, uint32_t roundbits = 0) const;
+```
+
+### EvalSign
+- **Input**:
+  - Vector of LWECiphertext
+- **Output**:
+  - Vector of LWECiphertext
+```cpp
+std::vector<LWECiphertext> EvalSign(const std::vector<LWECiphertext>& ct) const;
+```
+
+### EvalDecomp
+- **Input**:
+  - Vector of LWECiphertext
+- **Output**:
+  - Vector of Vector of LWECiphertext
+```cpp
+std::vector<std::vector<LWECiphertext>> EvalDecomp(const std::vector<LWECiphertext>& ct) const;
 ```
 
 ## Sample Program

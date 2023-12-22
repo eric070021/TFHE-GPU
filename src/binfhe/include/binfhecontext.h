@@ -339,15 +339,6 @@ public:
     ***************************************************************************************************************************************/
 
     /**
-   * Evaluate an arbitrary function
-   *
-   * @param &ct1 vector of ciphertexts to be bootstrapped
-   * @param LUT the look-up table of the to-be-evaluated function
-   * @return a shared pointer to the resulting ciphertext
-   */
-    std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const;
-
-    /**
    * Evaluates a binary gate (calls bootstrapping as a subroutine)
    *
    * @param gate the gate; can be AND, OR, NAND, NOR, XOR, or XNOR
@@ -357,7 +348,16 @@ public:
    */
     std::vector<LWECiphertext> EvalBinGate(BINGATE gate, const std::vector<LWECiphertext>& ct1, const std::vector<LWECiphertext>& ct2) const;
 
-     /**
+    /**
+   * Evaluate an arbitrary function
+   *
+   * @param &ct1 vector of ciphertexts to be bootstrapped
+   * @param LUT the look-up table of the to-be-evaluated function
+   * @return a shared pointer to the resulting ciphertext
+   */
+    std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const;
+
+    /**
    * Evaluate a round down function
    *
    * @param &ct1 vector of ciphertexts to be bootstrapped
