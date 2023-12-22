@@ -99,32 +99,55 @@ void EvalFloorTest(){
 
     int p = cc.GetMaxPlaintextSpace().ConvertToInt();
 
-    // Encryption
-    uint32_t input = 6;
     std::vector<LWECiphertext> ct_vec;
-    for (int i = 0; i < 1; i++) {
-        auto ct1 = cc.Encrypt(sk, input % p, FRESH, p);
+    for (int i = 0; i < p; i++) {
+        auto ct1 = cc.Encrypt(sk, i % p, FRESH, p);
         ct_vec.push_back(ct1);
     }
 
-    uint32_t bits;
-    LWEPlaintext result;
-    std::vector<LWECiphertext> ctRounded_vec;
+    uint32_t bits = 1;
+    auto ctRounded_vec = cc.EvalFloor(ct_vec, bits);
 
-    bits = 1;
-    ctRounded_vec = cc.EvalFloor(ct_vec, bits);
-    cc.Decrypt(sk, ctRounded_vec[0], &result, p / (1 << bits));
-    std::cout << "Input: " << input << " >> " << bits << ". Expected: " << (input >> bits) << ". Evaluated = " << result << std::endl;
+    for (int i = 0; i < p; i++) {
+        LWEPlaintext result;
+        cc.Decrypt(sk, ctRounded_vec[i], &result, p / (1 << bits));
+        std::cout << "Input: " << i % p << " >> " << bits << ". Expected: " << ((i % p) >> bits) << ". Evaluated = " << result << std::endl;
+    }
 
-    bits = 2;
-    ctRounded_vec = cc.EvalFloor(ct_vec, bits);
-    cc.Decrypt(sk, ctRounded_vec[0], &result, p / (1 << bits));
-    std::cout << "Input: " << input << " >> " << bits << ". Expected: " << (input >> bits) << ". Evaluated = " << result << std::endl;
+    std::cout << "--------------------------------" << std::endl;
 
-    bits = 3;
-    ctRounded_vec = cc.EvalFloor(ct_vec, bits);
-    cc.Decrypt(sk, ctRounded_vec[0], &result, p / (1 << bits));
-    std::cout << "Input: " << input << " >> " << bits << ". Expected: " << (input >> bits) << ". Evaluated = " << result << std::endl;
+    cc.GPUClean();
+}
+
+void EvalSignTest(){
+    std::cout << "EvalSignTest Test: " << std::endl;
+
+    auto cc = BinFHEContext();
+    uint32_t logQ = 17;
+    cc.GenerateBinFHEContext(STD128, false, logQ, 0, GINX, false);
+    auto sk = cc.KeyGen();
+    cc.BTKeyGen(sk);
+    cc.GPUSetup();
+
+    uint32_t Q = 1 << logQ;
+
+    int q      = 4096;                                               // q
+    int factor = 1 << int(logQ - log2(q));                           // Q/q
+    int p      = cc.GetMaxPlaintextSpace().ConvertToInt() * factor;  // Obtain the maximum plaintext space
+
+    std::vector<LWECiphertext> ct_vec;
+    for (int i = 0; i < 8; i++) {
+        auto ct1 = cc.Encrypt(sk, p / 2 + i - 3, FRESH, p, Q);
+        ct_vec.push_back(ct1);
+    }
+
+    auto ctSign_vec = cc.EvalSign(ct_vec);
+
+    for (int i = 0; i < 8; i++) {
+        LWEPlaintext result;
+        cc.Decrypt(sk, ctSign_vec[i], &result, 2);
+        std::cout << "Input: " << i << ". Expected sign: " << (i >= 3) << ". Evaluated Sign: " << result << std::endl;
+    }
 
     std::cout << "--------------------------------" << std::endl;
 
@@ -135,6 +158,7 @@ int main() {
     EvalFuncTest();
     EvalBinGateTest();
     EvalFloorTest();
+    EvalSignTest();
 
     return 0;
 }

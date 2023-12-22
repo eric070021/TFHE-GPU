@@ -366,6 +366,14 @@ public:
    */
     std::vector<LWECiphertext> EvalFloor(const std::vector<LWECiphertext>& ct, uint32_t roundbits = 0) const;
 
+    /**
+   * Evaluate a sign function over large precisions
+   *
+   * @param &ct1 vector of ciphertexts to be bootstrapped
+   * @return a shared pointer to the resulting ciphertext
+   */
+    std::vector<LWECiphertext> EvalSign(const std::vector<LWECiphertext>& ct);
+
     void GPUSetup() const;
 
     void GPUClean() const;
