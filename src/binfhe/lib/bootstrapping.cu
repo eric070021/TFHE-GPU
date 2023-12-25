@@ -14,6 +14,8 @@
 namespace lbcrypto {
 
 // Definition of the static member variables
+Complex* GPUFFTBootstrap::acc_host;
+uint64_t* GPUFFTBootstrap::ctExt_host;
 std::vector<GPUFFTBootstrap::GPUInfo> GPUFFTBootstrap::gpuInfoList;
 std::vector<GPUFFTBootstrap::GPUPointer> GPUFFTBootstrap::GPUVec;
 const std::map<uint32_t, uint32_t> GPUFFTBootstrap::synchronizationMap ={
@@ -784,8 +786,15 @@ void GPUFFTBootstrap::GPUSetup_core(const std::shared_ptr<BinFHECryptoParams> pa
     int64_t qKS_int             = qKS.ConvertToInt();
     uint32_t baseKS             = LWEParams->GetBaseKS();
     uint32_t digitCountKS       = (uint32_t)std::ceil(log(qKS.ConvertToDouble()) / log(static_cast<double>(baseKS)));
+    uint32_t max_n_N            = n > N ? n : N;
 
+    /* GPU settings */
     int GPU_num  = gpuInfoList.size();
+    int SM_count = gpuInfoList[0].multiprocessorCount;
+
+    /* Allocate host side memory for acc_host and ctExt_host */
+    cudaMallocHost((void**)&acc_host, max_bootstapping_num * 2 * NHalf * sizeof(Complex), cudaHostAllocDefault);
+    cudaMallocHost((void**)&ctExt_host, max_bootstapping_num * (max_n_N + 1) * sizeof(uint64_t), cudaHostAllocDefault);
 
     /* Initialize twiddle table */
     Complex *twiddleTable;
@@ -906,8 +915,6 @@ void GPUFFTBootstrap::GPUSetup_core(const std::shared_ptr<BinFHECryptoParams> pa
             CUDA_CHECK_AND_EXIT(cudaFuncSetAttribute(cuFFTDxFWD<FFT_fwd>, cudaFuncAttributeMaxDynamicSharedMemorySize, FFT_fwd::shared_memory_size));
         }
 
-        int SM_count = gpuInfoList[g].multiprocessorCount;
-
         /* Create cuda streams */
         GPUVec[g].streams.resize(SM_count);
         for (int s = 0; s < SM_count; s++) {
@@ -949,7 +956,6 @@ void GPUFFTBootstrap::GPUSetup_core(const std::shared_ptr<BinFHECryptoParams> pa
         cudaMalloc(&GPUVec[g].a_CUDA, SM_count * n * sizeof(uint64_t));
 
         /* Allocate ctExt_CUDA on GPU */
-        uint32_t max_n_N = n > N ? n : N;
         cudaMalloc(&GPUVec[g].ctExt_CUDA, SM_count * (max_n_N + 1) * sizeof(uint64_t));
     }
 
@@ -985,6 +991,10 @@ void GPUFFTBootstrap::GPUClean(){
             cudaStreamDestroy(GPUVec[g].streams[s]);
         }
     }
+
+    /* Free host memory */     
+    cudaFreeHost(acc_host);
+    cudaFreeHost(ctExt_host);
 
     gpuInfoList.clear();
     GPUVec.clear();
@@ -1482,76 +1492,101 @@ void GPUFFTBootstrap::AddToAccCGGI_CUDA_single(const std::shared_ptr<RingGSWCryp
         exit(1);
     }
 
-    /* Initialize a_arr */
-    uint64_t* a_arr;
-    cudaMallocHost((void**)&a_arr, bootstrap_num * n * sizeof(uint64_t));
-    for (int s = 0; s < bootstrap_num; s++)
-        for (size_t i = 0; i < n; ++i)
-            a_arr[s*n + i] = (mod.ModSub(a[s][i], mod) * (M / modInt)).ConvertToInt();
-
-    /* Initialize acc_d_arr */
-    Complex* acc_d_arr;
-    cudaMallocHost((void**)&acc_d_arr, bootstrap_num * 2 * NHalf * sizeof(Complex));
-    for (int s = 0; s < bootstrap_num; s++){
-        for(int i = 0; i < 2; i++){
-            NativePoly& acc_t((*acc)[s]->GetElements()[i]);
-            for(int j = 0; j < NHalf; j++){
-                acc_d_arr[s*2*NHalf + i*NHalf + j] = Complex(static_cast<double>(acc_t[j].ConvertToInt()), static_cast<double>(acc_t[j + NHalf].ConvertToInt()));
-            }
-        }
-    }
+    /* Define and allocate a_host*/
+    std::vector<uint64_t> a_host(n);
 
     auto start = std::chrono::high_resolution_clock::now();
 
     /* Main Bootstrapping */
     auto sync_it = synchronizationMap.find(FFT_dimension);
     uint32_t syncNum = sync_it->second;
-    for (int s = 0; s < bootstrap_num; s++) {
+    int s;
+    for (s = 0; s < bootstrap_num; s++) {
         int currentGPU = (s / SM_count) % GPU_num;
         if(s % SM_count == 0){
             cudaSetDevice(currentGPU);
         }
-        cudaMemcpyAsync(GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
-        cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+        /* Initialize a_host */
+        for (size_t i = 0; i < n; ++i)
+            a_host[i] = (mod.ModSub(a[s][i], mod) * (M / modInt)).ConvertToInt();
+        /* Initialize acc_host */
+        for(int i = 0; i < 2; i++){
+            NativePoly& acc_t((*acc)[s]->GetElements()[i]);
+            for(int j = 0; j < NHalf; j++){
+                acc_host[(s % max_bootstapping_num)*2*NHalf + i*NHalf + j] = Complex(acc_t[j].ConvertToDouble(), acc_t[j + NHalf].ConvertToDouble());
+            }
+        }
+
+        cudaMemcpyAsync(GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, a_host.data(), n * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+        cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_host + (s % max_bootstapping_num)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
         bootstrappingSingleBlock<FFT, IFFT><<<1, FFT::block_dim, FFT::shared_memory_size, GPUVec[currentGPU].streams[s % SM_count]>>>
             (GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].ct_CUDA + (s % SM_count)*2*NHalf, GPUVec[currentGPU].dct_CUDA + (s % SM_count)*digitsG2*NHalf,
                 GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, GPUVec[currentGPU].monomial_CUDA, GPUVec[currentGPU].twiddleTable_CUDA, GPUVec[currentGPU].GINX_bootstrappingKey_CUDA, 
                 GPUVec[currentGPU].keySwitchingkey_CUDA, GPUVec[currentGPU].params_CUDA, fmod, syncNum);
-        cudaMemcpyAsync(acc_d_arr + s*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
-    }
+        cudaMemcpyAsync(acc_host + (s % max_bootstapping_num)*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
 
-    /* Synchronize all GPUs */
-    for(int g = 0; g < GPU_num; g++){
-        cudaSetDevice(g);
-        CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
-        CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
-    }
+        if((s % max_bootstapping_num) == max_bootstapping_num-1){
+            /* Synchronize all GPUs */
+            for(int g = 0; g < GPU_num; g++){
+                cudaSetDevice(g);
+                CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+                CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+            }
 
-    auto end = std::chrono::high_resolution_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
-    //std::cout << bootstrap_num << "AddToAccCGGI_CUDA_core GPU time : " << elapsed.count() << " ms" << std::endl;
+            /* cast acc_host back to NativePoly */
+#pragma omp parallel for if (max_bootstapping_num > 512)
+            for (int i = 0; i < max_bootstapping_num; i++) {
+                NativeVector ret0(N, Q), ret1(N, Q);
+                for(int j = 0; j < NHalf; j++){
+                    ret0[j] = static_cast<BasicInteger>(acc_host[i*2*NHalf + j].real());
+                    ret0[j + NHalf] = static_cast<BasicInteger>(acc_host[i*2*NHalf + j].imag());
+                    ret1[j] = static_cast<BasicInteger>(acc_host[i*2*NHalf + NHalf + j].real());
+                    ret1[j + NHalf] = static_cast<BasicInteger>(acc_host[i*2*NHalf + NHalf + j].imag());
+                }
+                std::vector<NativePoly> res(2);
+                res[0] = NativePoly(polyParams, Format::COEFFICIENT, false);
+                res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
+                res[0].SetValues(std::move(ret0), Format::COEFFICIENT);
+                res[1].SetValues(std::move(ret1), Format::COEFFICIENT);
 
-    /* cast acc_d_arr back to NativePoly */
-    for (int s = 0; s < bootstrap_num; s++) {
-        NativeVector ret0(N, Q), ret1(N, Q);
-        for(int i = 0; i < NHalf; i++){
-            ret0[i] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + i].real());
-            ret0[i + NHalf] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + i].imag());
-            ret1[i] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + NHalf + i].real());
-            ret1[i + NHalf] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + NHalf + i].imag());
+                (*acc)[s-max_bootstapping_num+1+i] = std::make_shared<RLWECiphertextImpl>(std::move(res));
+            }
         }
-        std::vector<NativePoly> res(2);
-        res[0] = NativePoly(polyParams, Format::COEFFICIENT, false);
-        res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
-        res[0].SetValues(std::move(ret0), Format::COEFFICIENT);
-        res[1].SetValues(std::move(ret1), Format::COEFFICIENT);
-
-        (*acc)[s] = std::make_shared<RLWECiphertextImpl>(std::move(res));
     }
+    
+    /* If bootstrapping number can't be divided by max bootstrapping num*/
+    if((bootstrap_num % max_bootstapping_num) != 0){
+        /* Synchronize all GPUs */
+        for(int g = 0; g < GPU_num; g++){
+            cudaSetDevice(g);
+            CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+            CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+        }
 
-    /* Free memory */     
-    cudaFreeHost(a_arr);
-    cudaFreeHost(acc_d_arr);
+        auto end = std::chrono::high_resolution_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
+        //std::cout << bootstrap_num << "AddToAccCGGI_CUDA_single GPU time : " << elapsed.count() << " ms" << std::endl;
+
+        /* cast acc_host back to NativePoly */
+        int acc_init = bootstrap_num > max_bootstapping_num ? s - (bootstrap_num % max_bootstapping_num) : 0;
+#pragma omp parallel for if ((bootstrap_num % max_bootstapping_num) > 512)
+        for (int i = 0; i < (bootstrap_num % max_bootstapping_num); i++) {
+            NativeVector ret0(N, Q), ret1(N, Q);
+            for(int j = 0; j < NHalf; j++){
+                ret0[j] = static_cast<BasicInteger>(acc_host[i*2*NHalf + j].real());
+                ret0[j + NHalf] = static_cast<BasicInteger>(acc_host[i*2*NHalf + j].imag());
+                ret1[j] = static_cast<BasicInteger>(acc_host[i*2*NHalf + NHalf + j].real());
+                ret1[j + NHalf] = static_cast<BasicInteger>(acc_host[i*2*NHalf + NHalf + j].imag());
+            }
+            std::vector<NativePoly> res(2);
+            res[0] = NativePoly(polyParams, Format::COEFFICIENT, false);
+            res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
+            res[0].SetValues(std::move(ret0), Format::COEFFICIENT);
+            res[1].SetValues(std::move(ret1), Format::COEFFICIENT);
+
+            (*acc)[i+acc_init] = std::make_shared<RLWECiphertextImpl>(std::move(res));
+        }
+    }
 }
 
 template<uint32_t arch, uint32_t FFT_dimension>
@@ -1602,81 +1637,106 @@ void GPUFFTBootstrap::AddToAccCGGI_CUDA_multi(const std::shared_ptr<RingGSWCrypt
         exit(1);
     }
 
-    /* Initialize a_arr */
-    uint64_t* a_arr;
-    cudaMallocHost((void**)&a_arr, bootstrap_num * n * sizeof(uint64_t));
-    for (int s = 0; s < bootstrap_num; s++)
-        for (size_t i = 0; i < n; ++i)
-            a_arr[s*n + i] = (mod.ModSub(a[s][i], mod) * (M / modInt)).ConvertToInt();
-
-    /* Initialize acc_d_arr */
-    Complex* acc_d_arr;
-    cudaMallocHost((void**)&acc_d_arr, bootstrap_num * 2 * NHalf * sizeof(Complex));
-    for (int s = 0; s < bootstrap_num; s++){
-        for(int i = 0; i < 2; i++){
-            NativePoly& acc_t((*acc)[s]->GetElements()[i]);
-            for(int j = 0; j < NHalf; j++){
-                acc_d_arr[s*2*NHalf + i*NHalf + j] = Complex(static_cast<double>(acc_t[j].ConvertToInt()), static_cast<double>(acc_t[j + NHalf].ConvertToInt()));
-            }
-        }
-    }
+    /* Define and allocate a_host */
+    std::vector<uint64_t> a_host(n);
 
     auto start = std::chrono::high_resolution_clock::now();
 
     /* Main Bootstrapping */
     Complex_d* acc_CUDA_offset, *ct_CUDA_offset, *dct_CUDA_offset;
     uint64_t* a_CUDA_offset;
-    for (int s = 0; s < bootstrap_num; s++) {
+    int s;
+    for (s = 0; s < bootstrap_num; s++) {
         int currentGPU = (s / SM_count) % GPU_num;
         if(s % SM_count == 0){
             cudaSetDevice(currentGPU);
         }
+        /* Initialize a_host */
+        for (size_t i = 0; i < n; ++i)
+            a_host[i] = (mod.ModSub(a[s][i], mod) * (M / modInt)).ConvertToInt();
+        /* Initialize acc_host */
+        for(int i = 0; i < 2; i++){
+            NativePoly& acc_t((*acc)[s]->GetElements()[i]);
+            for(int j = 0; j < NHalf; j++){
+                acc_host[(s % max_bootstapping_num)*2*NHalf + i*NHalf + j] = Complex(acc_t[j].ConvertToDouble(), acc_t[j + NHalf].ConvertToDouble());
+            }
+        }
+
         acc_CUDA_offset = GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf;
         ct_CUDA_offset = GPUVec[currentGPU].ct_CUDA + (s % SM_count)*2*NHalf;
         dct_CUDA_offset = GPUVec[currentGPU].dct_CUDA + (s % SM_count)*digitsG2*NHalf;
         a_CUDA_offset = GPUVec[currentGPU].a_CUDA + (s % SM_count)*n;
-        cudaMemcpyAsync(GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, a_arr + s*n, n * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
-        cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_d_arr + s*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+        cudaMemcpyAsync(GPUVec[currentGPU].a_CUDA + (s % SM_count)*n, a_host.data(), n * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+        cudaMemcpyAsync(GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, acc_host + (s % max_bootstapping_num)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
         void *kernelArgs[] = {(void *)&acc_CUDA_offset, (void *)&ct_CUDA_offset, (void *)&dct_CUDA_offset, (void *)&a_CUDA_offset, 
             (void *)&GPUVec[currentGPU].monomial_CUDA, (void *)&GPUVec[currentGPU].twiddleTable_CUDA, (void *)&GPUVec[currentGPU].GINX_bootstrappingKey_CUDA,
                 (void *)&GPUVec[currentGPU].keySwitchingkey_CUDA, (void *)&GPUVec[currentGPU].params_CUDA, (void *)&fmod};
         cudaLaunchCooperativeKernel((void*)(bootstrappingMultiBlock<FFT, IFFT>), digitsG2/2, FFT::block_dim, 
             kernelArgs, FFT::shared_memory_size, GPUVec[currentGPU].streams[s % SM_count]);
-        cudaMemcpyAsync(acc_d_arr + s*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
-    }
+        cudaMemcpyAsync(acc_host + (s % max_bootstapping_num)*2*NHalf, GPUVec[currentGPU].acc_CUDA + (s % SM_count)*2*NHalf, 2 * NHalf * sizeof(Complex_d), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
 
-    /* Synchronize all GPUs */
-    for(int g = 0; g < GPU_num; g++){
-        cudaSetDevice(g);
-        CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
-        CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
-    }
+        if((s % max_bootstapping_num) == max_bootstapping_num-1){
+            /* Synchronize all GPUs */
+            for(int g = 0; g < GPU_num; g++){
+                cudaSetDevice(g);
+                CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+                CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+            }
 
-    auto end = std::chrono::high_resolution_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
-    //std::cout << bootstrap_num << "AddToAccCGGI_CUDA_core GPU time : " << elapsed.count() << " ms" << std::endl;
+            /* cast acc_host back to NativePoly */
+#pragma omp parallel for if (max_bootstapping_num > 512)
+            for (int i = 0; i < max_bootstapping_num; i++) {
+                NativeVector ret0(N, Q), ret1(N, Q);
+                for(int j = 0; j < NHalf; j++){
+                    ret0[j] = static_cast<BasicInteger>(acc_host[i*2*NHalf + j].real());
+                    ret0[j + NHalf] = static_cast<BasicInteger>(acc_host[i*2*NHalf + j].imag());
+                    ret1[j] = static_cast<BasicInteger>(acc_host[i*2*NHalf + NHalf + j].real());
+                    ret1[j + NHalf] = static_cast<BasicInteger>(acc_host[i*2*NHalf + NHalf + j].imag());
+                }
+                std::vector<NativePoly> res(2);
+                res[0] = NativePoly(polyParams, Format::COEFFICIENT, false);
+                res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
+                res[0].SetValues(std::move(ret0), Format::COEFFICIENT);
+                res[1].SetValues(std::move(ret1), Format::COEFFICIENT);
 
-    /* cast acc_d_arr back to NativePoly */
-    for (int s = 0; s < bootstrap_num; s++) {
-        NativeVector ret0(N, Q), ret1(N, Q);
-        for(int i = 0; i < NHalf; i++){
-            ret0[i] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + i].real());
-            ret0[i + NHalf] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + i].imag());
-            ret1[i] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + NHalf + i].real());
-            ret1[i + NHalf] = static_cast<BasicInteger>(acc_d_arr[s*2*NHalf + NHalf + i].imag());
+                (*acc)[s-max_bootstapping_num+1+i] = std::make_shared<RLWECiphertextImpl>(std::move(res));
+            }
         }
-        std::vector<NativePoly> res(2);
-        res[0] = NativePoly(polyParams, Format::COEFFICIENT, false);
-        res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
-        res[0].SetValues(std::move(ret0), Format::COEFFICIENT);
-        res[1].SetValues(std::move(ret1), Format::COEFFICIENT);
-
-        (*acc)[s] = std::make_shared<RLWECiphertextImpl>(std::move(res));
     }
 
-    /* Free memory */     
-    cudaFreeHost(a_arr);
-    cudaFreeHost(acc_d_arr);
+    /* If bootstrapping number can't be divided by max bootstrapping num*/
+    if((bootstrap_num % max_bootstapping_num) != 0){
+        /* Synchronize all GPUs */
+        for(int g = 0; g < GPU_num; g++){
+            cudaSetDevice(g);
+            CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+            CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+        }
+
+        auto end = std::chrono::high_resolution_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
+        //std::cout << bootstrap_num << "AddToAccCGGI_CUDA_multi GPU time : " << elapsed.count() << " ms" << std::endl;
+
+        /* cast acc_host back to NativePoly */
+        int acc_init = bootstrap_num > max_bootstapping_num ? s - (bootstrap_num % max_bootstapping_num) : 0;
+#pragma omp parallel for if ((bootstrap_num % max_bootstapping_num) > 512)
+        for (int i = 0; i < (bootstrap_num % max_bootstapping_num); i++) {
+            NativeVector ret0(N, Q), ret1(N, Q);
+            for(int j = 0; j < NHalf; j++){
+                ret0[j] = static_cast<BasicInteger>(acc_host[i*2*NHalf + j].real());
+                ret0[j + NHalf] = static_cast<BasicInteger>(acc_host[i*2*NHalf + j].imag());
+                ret1[j] = static_cast<BasicInteger>(acc_host[i*2*NHalf + NHalf + j].real());
+                ret1[j + NHalf] = static_cast<BasicInteger>(acc_host[i*2*NHalf + NHalf + j].imag());
+            }
+            std::vector<NativePoly> res(2);
+            res[0] = NativePoly(polyParams, Format::COEFFICIENT, false);
+            res[1] = NativePoly(polyParams, Format::COEFFICIENT, false);
+            res[0].SetValues(std::move(ret0), Format::COEFFICIENT);
+            res[1].SetValues(std::move(ret1), Format::COEFFICIENT);
+
+            (*acc)[i+acc_init] = std::make_shared<RLWECiphertextImpl>(std::move(res));
+        }
+    }
 }
 
 void GPUFFTBootstrap::MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> params, std::shared_ptr<std::vector<LWECiphertext>> ctExt, NativeInteger fmod)
@@ -1691,55 +1751,74 @@ void GPUFFTBootstrap::MKMSwitch_CUDA(const std::shared_ptr<LWECryptoParams> para
     int GPU_num             = gpuInfoList.size();
     int SM_count            = gpuInfoList[0].multiprocessorCount;
 
-    /* Initialize ctExt_host */
-    uint64_t* ctExt_host;
-    cudaMallocHost((void**)&ctExt_host, bootstrap_num * (max_n_N + 1) * sizeof(uint64_t));
-    for (int s = 0; s < bootstrap_num; s++){
-        // A
-        for(int i = 0; i < N; i++)
-            ctExt_host[s*(max_n_N + 1) + i] = static_cast<uint64_t>((*ctExt)[s]->GetA()[i].ConvertToInt());
-        // B
-        ctExt_host[s*(max_n_N + 1) + N] = static_cast<uint64_t>((*ctExt)[s]->GetB().ConvertToInt());
-    }
-
     auto start = std::chrono::high_resolution_clock::now();
 
-    for (int s = 0; s < bootstrap_num; s++) {
+    int s;
+    for (s = 0; s < bootstrap_num; s++) {
         int currentGPU = (s / SM_count) % GPU_num;
         if(s % SM_count == 0){
             cudaSetDevice(currentGPU);
         }
-        cudaMemcpyAsync(GPUVec[currentGPU].ctExt_CUDA + (s % SM_count)*(max_n_N + 1), ctExt_host + s*(max_n_N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
+        /* Initialize ctExt_host */
+        // A
+        for(int i = 0; i < N; i++)
+            ctExt_host[(s % max_bootstapping_num)*(max_n_N + 1) + i] = (*ctExt)[s]->GetA()[i].ConvertToInt();
+        // B
+        ctExt_host[(s % max_bootstapping_num)*(max_n_N + 1) + N] = (*ctExt)[s]->GetB().ConvertToInt();
+
+        cudaMemcpyAsync(GPUVec[currentGPU].ctExt_CUDA + (s % SM_count)*(max_n_N + 1), ctExt_host + (s % max_bootstapping_num)*(max_n_N + 1), (N + 1) * sizeof(uint64_t), cudaMemcpyHostToDevice, GPUVec[currentGPU].streams[s % SM_count]);
         MKMSwitchKernel<<<1, 768, (N + 1) * sizeof(uint64_t), GPUVec[currentGPU].streams[s % SM_count]>>>
             (GPUVec[currentGPU].ctExt_CUDA + (s % SM_count)*(max_n_N + 1), GPUVec[currentGPU].keySwitchingkey_CUDA, GPUVec[currentGPU].params_CUDA, static_cast<uint64_t>(fmod.ConvertToInt()));
-        cudaMemcpyAsync(ctExt_host + s*(max_n_N + 1), GPUVec[currentGPU].ctExt_CUDA + (s % SM_count)*(max_n_N + 1), (n + 1) * sizeof(uint64_t), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
+        cudaMemcpyAsync(ctExt_host + (s % max_bootstapping_num)*(max_n_N + 1), GPUVec[currentGPU].ctExt_CUDA + (s % SM_count)*(max_n_N + 1), (n + 1) * sizeof(uint64_t), cudaMemcpyDeviceToHost, GPUVec[currentGPU].streams[s % SM_count]);
+        
+        if((s % max_bootstapping_num) == max_bootstapping_num-1){
+            /* Synchronize all GPUs */
+            for(int g = 0; g < GPU_num; g++){
+                cudaSetDevice(g);
+                CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+                CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+            }
+
+            /* Copy ctExt_host back to ctExt */
+            for (int i = 0; i < max_bootstapping_num; i++) {
+                // A
+                NativeVector a(n, fmod);
+                for(int j = 0; j < n; j++)
+                    a[j] = ctExt_host[i*(max_n_N + 1) + j];
+                // B
+                NativeInteger b (ctExt_host[i*(max_n_N + 1) + n]);
+
+                (*ctExt)[s-max_bootstapping_num+1+i] = std::make_shared<LWECiphertextImpl>(LWECiphertextImpl(std::move(a), b));
+            }
+        }
     }
 
-    /* Synchronize all GPUs */
-    for(int g = 0; g < GPU_num; g++){
-        cudaSetDevice(g);
-        CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
-        CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+    /* If bootstrapping number can't be divided by max bootstrapping num*/
+    if((bootstrap_num % max_bootstapping_num) != 0){
+        /* Synchronize all GPUs */
+        for(int g = 0; g < GPU_num; g++){
+            cudaSetDevice(g);
+            CUDA_CHECK_AND_EXIT(cudaPeekAtLastError());
+            CUDA_CHECK_AND_EXIT(cudaDeviceSynchronize());
+        }
+
+        auto end = std::chrono::high_resolution_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
+        //std::cout << bootstrap_num << "MKMSwitch_CUDA GPU time : " << elapsed.count() << " ms" << std::endl;
+
+        /* cast acc_host back to NativePoly */
+        int ct_init = bootstrap_num > max_bootstapping_num ? s - (bootstrap_num % max_bootstapping_num) : 0;
+        for (int i = 0; i < (bootstrap_num % max_bootstapping_num); i++) {
+            // A
+            NativeVector a(n, fmod);
+            for(int j = 0; j < n; j++)
+                a[j] = ctExt_host[i*(max_n_N + 1) + j];
+            // B
+            NativeInteger b (ctExt_host[i*(max_n_N + 1) + n]);
+
+            (*ctExt)[ct_init+i] = std::make_shared<LWECiphertextImpl>(LWECiphertextImpl(std::move(a), b));
+        }
     }
-
-    auto end = std::chrono::high_resolution_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
-    //std::cout << bootstrap_num << "MKMSwitch_CUDA GPU time : " << elapsed.count() << " ms" << std::endl;
-
-    /* Copy ctExt_host back to ctExt */
-    for (int s = 0; s < bootstrap_num; s++){
-        // A
-        NativeVector a(n, fmod);
-        for(int i = 0; i < n; i++)
-            a[i] = ctExt_host[s*(max_n_N + 1) + i];
-        // B
-        NativeInteger b (ctExt_host[s*(max_n_N + 1) + n]);
-
-        (*ctExt)[s] = std::make_shared<LWECiphertextImpl>(LWECiphertextImpl(std::move(a), b));
-    }
-
-    /* Free memory */     
-    cudaFreeHost(ctExt_host);
 }
 
 };  // namespace lbcrypto

@@ -737,6 +737,7 @@ std::shared_ptr<std::vector<LWECiphertext>> BinFHEScheme::EvalFunc(const std::sh
                 return q / 4;
         };
         auto ct3 = BootstrapFunc(params, EK, ct2, f0, dq);
+#pragma omp parallel for if (ct.size() > 512)
         for (uint32_t count = 0; count < ct.size(); count++){
             LWEscheme->EvalSubEq2(ct1[count], (*ct3)[count]);
             LWEscheme->EvalAddConstEq((*ct3)[count], beta);
@@ -752,6 +753,7 @@ std::shared_ptr<std::vector<LWECiphertext>> BinFHEScheme::EvalFunc(const std::sh
                 return Q - LUT2[x.ConvertToInt() - q.ConvertToInt() / 2];
         };
         auto ct4 = BootstrapFunc(params, EK, (*ct3), fLUT2, dq);
+#pragma omp parallel for if (ct3->size() > 512)
         for (uint32_t count = 0; count < ct3->size(); count++){
             (*ct4)[count]->SetModulus(q);
         }
@@ -1026,6 +1028,7 @@ std::shared_ptr<std::vector<RLWECiphertext>> BinFHEScheme::BootstrapFuncCore(con
     auto acc_vec = std::make_shared<std::vector<RLWECiphertext>> (ct.size());
     std::vector<NativeVector> a (ct.size());
 
+#pragma omp parallel for if (ct.size() > 512)
     for (uint32_t count = 0; count < ct.size(); count++){
         NativeVector m(N, Q);
         // For specific function evaluation instead of general bootstrapping
@@ -1056,7 +1059,7 @@ std::shared_ptr<std::vector<RLWECiphertext>> BinFHEScheme::BootstrapFuncCore(con
 template <typename Func>
 std::shared_ptr<std::vector<LWECiphertext>> BinFHEScheme::BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                                           const std::vector<LWECiphertext>& ct, const Func f, const NativeInteger fmod) const {
-                                       
+
     auto acc_vec = BootstrapFuncCore(params, EK.BSkey, ct, f, fmod);
     
     // Extract RLWE to LWE

@@ -12,6 +12,7 @@
 #include <vector>
 #include <map>
 #include <string>
+#include <omp.h>
 #include <chrono>
 #include "binfhe-base-params.h"
 #include "rgsw-cryptoparameters.h"
@@ -110,6 +111,13 @@ public:
                             NativeInteger fmod);
 
 private:
+    // Maximum number of bootstrapping, to prevent overusing RAM 
+    static constexpr int max_bootstapping_num = 65536;
+    
+    // Pre-allocated host side memory for bootstrapping
+    static Complex* acc_host;
+    static uint64_t* ctExt_host;
+
     // Synchornization Map used in Single block mode
     static const std::map<uint32_t, uint32_t> synchronizationMap;
 

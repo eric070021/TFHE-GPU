@@ -116,7 +116,10 @@ int main() {
         // int b = std::min(abs(static_cast<int64_t>(fp(i % p, p).ConvertToInt() * 256)- result), 4096 - abs(static_cast<int64_t>(fp(i % p, p).ConvertToInt() * 256) - result));
         // meanb += b;
         // maxb = std::max(maxb, b);
-        std::cout << "Input: " << i << ". Expected: " << fp(i % p, p) << ". Evaluated = " << result << std::endl;
+        //std::cout << "Input: " << i << ". Expected: " << fp(i % p, p) << ". Evaluated = " << result << std::endl;
+        if(static_cast<uint64_t>(result) != fp(i % p, p).ConvertToInt()) {
+            std::cout << "Input: " << i << ". Expected: " << fp(i % p, p) << ". Evaluated = " << result << std::endl;
+        }
     }
     // std::cout << "meanb: " << static_cast<double>(meanb) / 16384 << std::endl;
     // std::cout << "maxb: " << maxb << std::endl;
