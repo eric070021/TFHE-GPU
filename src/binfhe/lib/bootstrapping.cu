@@ -134,7 +134,7 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
             int64_t d0 = (t1 < QHalf) ? static_cast<int64_t>(t1) : (static_cast<int64_t>(t1) - static_cast<int64_t>(Q));
             int64_t d1 = (t2 < QHalf) ? static_cast<int64_t>(t2) : (static_cast<int64_t>(t2) - static_cast<int64_t>(Q));
 
-            for (size_t l = 0; l < (digitsG2 - 2); l += 2) {
+            for (size_t l = 0; l < digitsG2; l += 2) {
                 int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
                 d0 = (d0 - r0) >> gBits;
                 if (r0 < 0)
@@ -151,18 +151,6 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
                     r1 -= static_cast<int64_t>(Q);
                 dct_CUDA[l*NHalf + k].y = static_cast<double>(r1);
             }
-
-            if (d0 < 0)
-                d0 += static_cast<int64_t>(Q);
-            if (d0 >= QHalf)
-                d0 -= static_cast<int64_t>(Q);
-            dct_CUDA[(digitsG2 - 2)*NHalf + k].x = static_cast<double>(d0);
-            
-            if (d1 < 0)
-                d1 += static_cast<int64_t>(Q);
-            if (d1 >= QHalf)
-                d1 -= static_cast<int64_t>(Q);
-            dct_CUDA[(digitsG2 - 2)*NHalf + k].y = static_cast<double>(d1);
         }
         grid.sync();
 
@@ -388,7 +376,7 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
             int64_t d0 = (t1 < QHalf) ? static_cast<int64_t>(t1) : (static_cast<int64_t>(t1) - static_cast<int64_t>(Q));
             int64_t d1 = (t2 < QHalf) ? static_cast<int64_t>(t2) : (static_cast<int64_t>(t2) - static_cast<int64_t>(Q));
 
-            for (size_t l = 0; l < (digitsG2 - 2); l += 2) {
+            for (size_t l = 0; l < digitsG2; l += 2) {
                 int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
                 d0 = (d0 - r0) >> gBits;
                 if (r0 < 0)
@@ -405,18 +393,6 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
                     r1 -= static_cast<int64_t>(Q);
                 dct_CUDA[l*NHalf + k].y = static_cast<double>(r1);
             }
-
-            if (d0 < 0)
-                d0 += static_cast<int64_t>(Q);
-            if (d0 >= QHalf)
-                d0 -= static_cast<int64_t>(Q);
-            dct_CUDA[(digitsG2 - 2)*NHalf + k].x = static_cast<double>(d0);
-
-            if (d1 < 0)
-                d1 += static_cast<int64_t>(Q);
-            if (d1 >= QHalf)
-                d1 -= static_cast<int64_t>(Q);
-            dct_CUDA[(digitsG2 - 2)*NHalf + k].y = static_cast<double>(d1);
         }
         __syncthreads();
 

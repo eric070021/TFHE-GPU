@@ -152,7 +152,7 @@ void EvalBinGateTest(BINFHE_PARAMSET paramset){
 
     LWEPlaintext result;
     std::vector<LWECiphertext> ct1_vec, ct2_vec;
-    for (int i = 0; i < 1024; i++) {
+    for (int i = 0; i < 128; i++) {
         auto ct1 = cc.Encrypt(sk, 1);
         auto ct2 = cc.Encrypt(sk, 1);
         ct1_vec.push_back(ct1);
@@ -162,7 +162,7 @@ void EvalBinGateTest(BINFHE_PARAMSET paramset){
     auto ctNAND = cc.EvalBinGate(NAND, ct1_vec, ct2_vec);
 
     std::vector<int64_t> beta_arr;
-    for (int i = 0; i < 1024; i++) {
+    for (int i = 0; i < 128; i++) {
         cc.DecryptWithoutScale(sk, ctNAND[i], &result);
         int64_t b = result < (q/2) ? result : result - q;
         //int64_t b = std::min(result, q - result);
@@ -305,7 +305,7 @@ void EvalDecompTest(){
 
 int main() {
     // BaseGTest();
-    EvalFuncTest();
+    // EvalFuncTest();
     // EvalSignTest(12);
     // EvalSignTest(16);
     // EvalSignTest(20);
@@ -315,7 +315,7 @@ int main() {
     // EvalSignTest(28);
     // EvalSignTest(29);
     // EvalBinGateTest(MEDIUM);
-    // EvalBinGateTest(STD128);
+    EvalBinGateTest(STD128);
     // EvalBinGateTest(STD192);
     // EvalBinGateTest(STD256);
     // EvalBinGateTest(STD128Q);
