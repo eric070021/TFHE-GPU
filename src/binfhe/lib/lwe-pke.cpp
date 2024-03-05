@@ -133,6 +133,45 @@ void LWEEncryptionScheme::Decrypt(const std::shared_ptr<LWECryptoParams> params,
     return;
 }
 
+void LWEEncryptionScheme::DecryptWithoutScale(const std::shared_ptr<LWECryptoParams> params, ConstLWEPrivateKey sk,
+                                  ConstLWECiphertext ct, LWEPlaintext* result, const LWEPlaintextModulus& p) const {
+    // TODO in the future we should add a check to make sure sk parameters match
+    // the ct parameters
+
+    // Create local variables to speed up the computations
+    const NativeInteger& mod = ct->GetModulus();
+    if (mod % (p * 2) != 0 && mod.ConvertToInt() & (1 == 0)) {
+        std::string errMsg = "ERROR: ciphertext modulus q needs to be divisible by plaintext modulus p*2.";
+        OPENFHE_THROW(not_implemented_error, errMsg);
+    }
+
+    NativeVector a   = ct->GetA();
+    NativeVector s   = sk->GetElement();
+    uint32_t n       = s.GetLength();
+    NativeInteger mu = mod.ComputeMu();
+    s.SwitchModulus(mod);
+    NativeInteger inner(0);
+    for (size_t i = 0; i < n; ++i) {
+        inner += a[i].ModMulFast(s[i], mod, mu);
+    }
+    inner.ModEq(mod);
+
+    NativeInteger r = ct->GetB();
+
+    r.ModSubFastEq(inner, mod);
+    *result = r.ConvertToInt();
+
+#if defined(BINFHE_DEBUG)
+    double error =
+        (static_cast<double>(p) * (r.ConvertToDouble() - mod.ConvertToInt() / (p * 2))) / mod.ConvertToDouble() -
+        static_cast<double>(*result);
+    std::cerr << mod << " " << p << " " << r << " error:\t" << error << std::endl;
+    std::cerr << error * mod.ConvertToDouble() / static_cast<double>(p) << std::endl;
+#endif
+
+    return;
+}
+
 void LWEEncryptionScheme::EvalAddEq(LWECiphertext& ct1, ConstLWECiphertext ct2) const {
     ct1->GetA().ModAddEq(ct2->GetA());
     ct1->GetB().ModAddFastEq(ct2->GetB(), ct1->GetModulus());

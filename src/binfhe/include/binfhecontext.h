@@ -90,7 +90,7 @@ public:
    * @return creates the cryptocontext
    */
     void GenerateBinFHEContext(BINFHE_PARAMSET set, bool arbFunc, uint32_t logQ = 11, int64_t N = 0,
-                               BINFHE_METHOD method = GINX, bool timeOptimization = false);
+                               BINFHE_METHOD method = GINX, bool timeOptimization = false , uint32_t baseG = 0);
 
     /**
    * Creates a crypto context using predefined parameters sets. Recommended for
@@ -166,6 +166,17 @@ public:
    * @param DiffQ Decrypt according to DiffQ instead of m_q if DiffQ != 0
    */
     void Decrypt(ConstLWEPrivateKey sk, ConstLWECiphertext ct, LWEPlaintext* result, LWEPlaintextModulus p = 4) const;
+
+    /**
+   * Decrypts a ciphertext using a secret key wihtout scaling
+   *
+   * @param sk the secret key
+   * @param ct the ciphertext
+   * @param *result plaintext result
+   * @param p - plaintext modulus
+   * @param DiffQ Decrypt according to DiffQ instead of m_q if DiffQ != 0
+   */
+    void DecryptWithoutScale(ConstLWEPrivateKey sk, ConstLWECiphertext ct, LWEPlaintext* result, LWEPlaintextModulus p = 4) const;
 
     /**
    * Generates a switching key to go from a secret key with (Q,N) to a secret

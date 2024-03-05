@@ -83,6 +83,9 @@ public:
     void Decrypt(const std::shared_ptr<LWECryptoParams> params, ConstLWEPrivateKey sk, ConstLWECiphertext ct,
                  LWEPlaintext* result, const LWEPlaintextModulus& p = 4) const;
 
+    void DecryptWithoutScale(const std::shared_ptr<LWECryptoParams> params, ConstLWEPrivateKey sk, ConstLWECiphertext ct,
+                 LWEPlaintext* result, const LWEPlaintextModulus& p = 4) const;
+
     void EvalAddEq(LWECiphertext& ct1, ConstLWECiphertext ct2) const;
 
     void EvalAddConstEq(LWECiphertext& ct, NativeInteger cnst) const;

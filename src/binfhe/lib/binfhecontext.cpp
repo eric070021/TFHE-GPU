@@ -49,7 +49,7 @@ void BinFHEContext::GenerateBinFHEContext(uint32_t n, uint32_t N, const NativeIn
 }
 
 void BinFHEContext::GenerateBinFHEContext(BINFHE_PARAMSET set, bool arbFunc, uint32_t logQ, int64_t N,
-                                          BINFHE_METHOD method, bool timeOptimization) {
+                                          BINFHE_METHOD method, bool timeOptimization, uint32_t baseG) {
     if (GINX != method) {
         std::string errMsg("ERROR: CGGI is the only supported method");
         OPENFHE_THROW(not_implemented_error, errMsg);
@@ -68,19 +68,20 @@ void BinFHEContext::GenerateBinFHEContext(BINFHE_PARAMSET set, bool arbFunc, uin
         OPENFHE_THROW(not_implemented_error, errMsg);
     }
     auto logQprime = 54;
-    uint32_t baseG = 0;
-    if (logQ > 25) {
-        baseG = 1 << 14;
-    }
-    else if (logQ > 16) {
-        baseG = 1 << 18;
-    }
-    else if (logQ > 11) {
-        baseG = 1 << 27;
-    }
-    else {  // if (logQ == 11)
-        baseG     = 1 << 5;
-        logQprime = 27;
+    if(baseG == 0){
+        if (logQ > 25) {
+            baseG = 1 << 14;
+        }
+        else if (logQ > 16) {
+            baseG = 1 << 18;
+        }
+        else if (logQ > 11) {
+            baseG = 1 << 27;
+        }
+        else {  // if (logQ == 11)
+            baseG     = 1 << 5;
+            logQprime = 27;
+        }
     }
 
     m_timeOptimization = timeOptimization;
@@ -207,6 +208,12 @@ void BinFHEContext::Decrypt(ConstLWEPrivateKey sk, ConstLWECiphertext ct, LWEPla
                             LWEPlaintextModulus p) const {
     auto& LWEParams = m_params->GetLWEParams();
     m_LWEscheme->Decrypt(LWEParams, sk, ct, result, p);
+}
+
+void BinFHEContext::DecryptWithoutScale(ConstLWEPrivateKey sk, ConstLWECiphertext ct, LWEPlaintext* result,
+                            LWEPlaintextModulus p) const {
+    auto& LWEParams = m_params->GetLWEParams();
+    m_LWEscheme->DecryptWithoutScale(LWEParams, sk, ct, result, p);
 }
 
 LWESwitchingKey BinFHEContext::KeySwitchGen(ConstLWEPrivateKey sk, ConstLWEPrivateKey skN) const {
