@@ -867,11 +867,11 @@ std::shared_ptr<std::vector<LWECiphertext>> BinFHEScheme::EvalSign(const std::sh
 
     NativeInteger q = LWEParams->Getq();
 
-    if (mod <= q) {
-        std::string errMsg =
-            "ERROR: EvalSign is only for large precision. For small precision, please use bootstrapping directly";
-        OPENFHE_THROW(not_implemented_error, errMsg);
-    }
+    // if (mod <= q) {
+    //     std::string errMsg =
+    //         "ERROR: EvalSign is only for large precision. For small precision, please use bootstrapping directly";
+    //     OPENFHE_THROW(not_implemented_error, errMsg);
+    // }
 
     // cttmp: copy of the input ciphertexts
     auto cttmp = std::make_shared<std::vector<LWECiphertext>> (ct.size());
