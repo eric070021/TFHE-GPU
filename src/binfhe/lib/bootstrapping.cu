@@ -128,15 +128,21 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
     complex_type thread_data[FFT::storage_size];
 
     for(uint32_t round = 0; round < n; ++round){
-        /* SignedDigitDecompose */
+        /* Approximate SignedDigitDecompose */
         for (size_t k = gtid; k < N; k += gdim) { // 0~NHalf-1: a, NHalf~N-1: b
             const uint64_t& t1 = static_cast<uint64_t>(acc_CUDA[k].x);
             const uint64_t& t2 = static_cast<uint64_t>(acc_CUDA[k].y);
             int64_t d0 = (t1 < QHalf) ? static_cast<int64_t>(t1) : (static_cast<int64_t>(t1) - static_cast<int64_t>(Q));
             int64_t d1 = (t2 < QHalf) ? static_cast<int64_t>(t2) : (static_cast<int64_t>(t2) - static_cast<int64_t>(Q));
 
+            int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
+            d0 = (d0 - r0) >> gBits;
+            
+            int64_t r1 = (d1 << gBitsMaxBits) >> gBitsMaxBits;
+            d1 = (d1 - r1) >> gBits;
+
             for (size_t l = 0; l < digitsG2; l += 2) {
-                int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
+                r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
                 d0 = (d0 - r0) >> gBits;
                 if (r0 < 0)
                     r0 += static_cast<int64_t>(Q);
@@ -144,7 +150,7 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
                     r0 -= static_cast<int64_t>(Q);
                 dct_CUDA[l*NHalf + k].x = static_cast<double>(r0);
 
-                int64_t r1 = (d1 << gBitsMaxBits) >> gBitsMaxBits;
+                r1 = (d1 << gBitsMaxBits) >> gBitsMaxBits;
                 d1 = (d1 - r1) >> gBits;
                 if (r1 < 0)
                     r1 += static_cast<int64_t>(Q);
@@ -387,7 +393,9 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
     const uint32_t RGSW_size    = digitsG2 * 2 * NHalf;
     const int32_t gBits         = static_cast<int32_t>(log2(static_cast<double>(baseG)));
     const int32_t gBitsMaxBits  = 64 - gBits;
+<<<<<<< HEAD
     const bool modInt64         = Q > 4294967296 ? false : true; // Q > 2^32 or not
+=======
 
     /* cufftdx variables */
     using complex_type = typename FFT::value_type;
@@ -397,15 +405,21 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
     complex_type thread_data[FFT::storage_size];     
 
     for(uint32_t round = 0; round < n; ++round){
-        /* SignedDigitDecompose */
+        /* Approximate SignedDigitDecompose */
         for (size_t k = tid; k < N; k += bdim) { // 0~NHalf-1: a, NHalf~N-1: b
             const uint64_t& t1 = static_cast<uint64_t>(acc_CUDA[k].x);
             const uint64_t& t2 = static_cast<uint64_t>(acc_CUDA[k].y);
             int64_t d0 = (t1 < QHalf) ? static_cast<int64_t>(t1) : (static_cast<int64_t>(t1) - static_cast<int64_t>(Q));
             int64_t d1 = (t2 < QHalf) ? static_cast<int64_t>(t2) : (static_cast<int64_t>(t2) - static_cast<int64_t>(Q));
 
+            int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
+            d0 = (d0 - r0) >> gBits;
+
+            int64_t r1 = (d1 << gBitsMaxBits) >> gBitsMaxBits;
+            d1 = (d1 - r1) >> gBits;
+
             for (size_t l = 0; l < digitsG2; l += 2) {
-                int64_t r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
+                r0 = (d0 << gBitsMaxBits) >> gBitsMaxBits;
                 d0 = (d0 - r0) >> gBits;
                 if (r0 < 0)
                     r0 += static_cast<int64_t>(Q);
@@ -413,7 +427,7 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
                     r0 -= static_cast<int64_t>(Q);
                 dct_CUDA[l*NHalf + k].x = static_cast<double>(r0);
 
-                int64_t r1 = (d1 << gBitsMaxBits) >> gBitsMaxBits;
+                r1 = (d1 << gBitsMaxBits) >> gBitsMaxBits;
                 d1 = (d1 - r1) >> gBits;
                 if (r1 < 0)
                     r1 += static_cast<int64_t>(Q);
@@ -835,7 +849,7 @@ void GPUFFTBootstrap::GPUSetup_core(const std::shared_ptr<BinFHECryptoParams> pa
     uint32_t N                  = RGSWParams->GetN();
     uint32_t NHalf              = N >> 1;
     uint32_t n                  = LWEParams->Getn();
-    uint32_t digitsG2           = RGSWParams->GetDigitsG() << 1;
+    uint32_t digitsG2           = (RGSWParams->GetDigitsG() - 1) << 1;
     uint32_t baseG              = RGSWParams->GetBaseG();
     uint32_t RGSW_size          = digitsG2 * 2 * NHalf;
     NativeInteger qKS           = LWEParams->GetqKS();
@@ -1063,7 +1077,7 @@ std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> GPUFFTBootstrap:
     NativeInteger QHalf = Q >> 1;
     NativeInteger::SignedNativeInt Q_int = Q.ConvertToInt();
     uint32_t digitsG  = params->GetDigitsG();
-    uint32_t digitsG2 = digitsG << 1;
+    uint32_t digitsG2 = (digitsG - 1) << 1;
     uint32_t N        = params->GetN();
 
     auto ek_d = std::make_shared<std::vector<std::vector<std::vector<Complex>>>>
@@ -1089,7 +1103,7 @@ void GPUFFTBootstrap::EvalAcc_CUDA(const std::shared_ptr<RingGSWCryptoParams> pa
     /* Parameters Set */
     uint32_t N          = params->GetN();
     uint32_t NHalf      = N >> 1;
-    uint32_t digitsG2   = params->GetDigitsG() << 1;
+    uint32_t digitsG2   = (params->GetDigitsG() - 1) << 1;
     uint32_t arch       = gpuInfoList[0].major * 100 + gpuInfoList[0].minor * 10;
 
     /* Determine mode of EvalAcc_CUDA */
@@ -1514,7 +1528,7 @@ void GPUFFTBootstrap::AddToAccCGGI_CUDA_single(const std::shared_ptr<RingGSWCryp
     uint32_t NHalf          = N >> 1;
     uint32_t n              =  a[0].GetLength();
     uint32_t M              = 2 * params->GetN();
-    uint32_t digitsG2       = params->GetDigitsG() << 1;
+    uint32_t digitsG2       = (params->GetDigitsG() - 1) << 1;
     auto polyParams         = params->GetPolyParams();
 
     /* Configure cuFFTDx */
@@ -1660,7 +1674,7 @@ void GPUFFTBootstrap::AddToAccCGGI_CUDA_multi(const std::shared_ptr<RingGSWCrypt
     uint32_t NHalf          = N >> 1;
     uint32_t n              =  a[0].GetLength();
     uint32_t M              = 2 * params->GetN();
-    uint32_t digitsG2       = params->GetDigitsG() << 1;
+    uint32_t digitsG2       = (params->GetDigitsG() - 1) << 1;
     auto polyParams         = params->GetPolyParams();
 
     /* GPU settings */
