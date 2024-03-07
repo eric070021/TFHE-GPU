@@ -2,6 +2,65 @@
 
 using namespace lbcrypto;
 
+void EvalFuncDiffLUTTest(){
+    std::cout << "EvalFunc using different LUTs Test: " << std::endl;
+
+    auto cc = BinFHEContext();
+    cc.GenerateBinFHEContext(STD128, true, 12);
+    auto sk = cc.KeyGen();
+    cc.BTKeyGen(sk);
+    cc.GPUSetup();
+
+    int p = cc.GetMaxPlaintextSpace().ConvertToInt();  // Obtain the maximum plaintext space
+    // Initialize Function f(x) = x^3 % p
+    auto fp1 = [](NativeInteger m, NativeInteger p1) -> NativeInteger {
+        if (m < p1)
+            return (m * m * m) % p1;
+        else
+            return ((m - p1 / 2) * (m - p1 / 2) * (m - p1 / 2)) % p1;
+    };
+
+    // Initialize Function f(x) = x % p
+    auto fp2 = [](NativeInteger m, NativeInteger p1) -> NativeInteger {
+        return m;
+    };
+
+    // Generate LUT from function f(x)
+    auto lut1 = cc.GenerateLUTviaFunction(fp1, p);
+    auto lut2 = cc.GenerateLUTviaFunction(fp2, p);
+    std::vector<std::vector<lbcrypto::NativeInteger>> lut_vec;
+    for (int i = 0; i < p/2; i++) {
+        lut_vec.push_back(lut1);
+    }
+    for (int i = p/2; i < p; i++) {
+        lut_vec.push_back(lut2);
+    }
+
+    std::vector<LWECiphertext> ct_vec;
+    for (int i = 0; i < p; i++) {
+        auto ct1 = cc.Encrypt(sk, i % p, FRESH, p);
+        ct_vec.push_back(ct1);
+    }
+    
+    auto ct_cube_vec = cc.EvalFunc(ct_vec, lut_vec);
+  
+    for (int i = 0; i < p/2; i++) {
+        LWEPlaintext result;
+        cc.Decrypt(sk, ct_cube_vec[i], &result, p);
+        std::cout << "Input: " << i << ". Expected: " << fp1(i % p, p) << ". Evaluated = " << result << std::endl;
+    }
+
+    for (int i = p/2; i < p; i++) {
+        LWEPlaintext result;
+        cc.Decrypt(sk, ct_cube_vec[i], &result, p);
+        std::cout << "Input: " << i << ". Expected: " << fp2(i % p, p) << ". Evaluated = " << result << std::endl;
+    }
+
+    std::cout << "--------------------------------" << std::endl;
+
+    cc.GPUClean();
+}
+
 void EvalFuncTest(){
     std::cout << "EvalFunc Test: " << std::endl;
 
@@ -206,6 +265,7 @@ void EvalDecompTest(){
 }
 
 int main() {
+    EvalFuncDiffLUTTest();
     EvalFuncTest();
     EvalBinGateTest();
     EvalFloorTest();

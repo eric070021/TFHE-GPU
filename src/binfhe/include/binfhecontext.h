@@ -369,6 +369,15 @@ public:
     std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const;
 
     /**
+   * Evaluate an arbitrary function
+   *
+   * @param &ct1 vector of ciphertexts to be bootstrapped
+   * @param LUT vector of look-up tables of the to-be-evaluated functions
+   * @return a shared pointer to the resulting ciphertext
+   */
+    std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<std::vector<NativeInteger>>& LUT_vec) const;
+
+    /**
    * Evaluate a round down function
    *
    * @param &ct1 vector of ciphertexts to be bootstrapped
