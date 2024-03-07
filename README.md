@@ -89,6 +89,14 @@ std::vector<LWECiphertext> EvalBinGate(BINGATE gate, const std::vector<LWECipher
 ```cpp
 std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const;
 ```
+- **Input**:
+  - Vector of LWECiphertext
+  - Vector of LookUpTables
+- **Output**:
+  - Vector of LWECiphertext
+```cpp
+std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<std::vector<NativeInteger>& LUT>) const;
+```
 
 ### EvalFloor
 - **Input**:
