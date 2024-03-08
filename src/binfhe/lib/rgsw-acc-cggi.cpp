@@ -444,7 +444,7 @@ void RingGSWAccumulatorCGGI::AddToAccCGGI_FFT(const std::shared_ptr<RingGSWCrypt
  
     uint64_t MInt = 2 * params->GetN();
     NativeInteger M(MInt);
-    uint32_t digitsG2 = params->GetDigitsG() << 1;
+    uint32_t digitsG2 = (params->GetDigitsG() - 1) << 1;
     auto polyParams   = params->GetPolyParams();
     auto Q            = params->GetQ();
     NativeInteger QHalf = Q >> 1;
