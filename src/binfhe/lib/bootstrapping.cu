@@ -393,9 +393,7 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
     const uint32_t RGSW_size    = digitsG2 * 2 * NHalf;
     const int32_t gBits         = static_cast<int32_t>(log2(static_cast<double>(baseG)));
     const int32_t gBitsMaxBits  = 64 - gBits;
-<<<<<<< HEAD
     const bool modInt64         = Q > 4294967296 ? false : true; // Q > 2^32 or not
-=======
 
     /* cufftdx variables */
     using complex_type = typename FFT::value_type;
