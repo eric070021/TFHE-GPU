@@ -118,6 +118,7 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
     const uint32_t RGSW_size    = digitsG2 * 2 * NHalf;
     const int32_t gBits         = static_cast<int32_t>(log2(static_cast<double>(baseG)));
     const int32_t gBitsMaxBits  = 64 - gBits;
+    const bool modInt64         = Q > 4294967296 ? false : true; // Q > 2^32 or not
 
     /* cufftdx variables */
     using complex_type = typename FFT::value_type;
@@ -291,30 +292,57 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
             // Save results
             {
                 unsigned int index = offset + threadIdx.x;
-                unsigned int twist_idx = threadIdx.x;
                 for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
                     ct_CUDA[index].x = thread_data[i].x;
                     ct_CUDA[index].y = thread_data[i].y;
-                    // twisting
-                    ct_CUDA[index] = cuCmul(ct_CUDA[index], twiddleTable_CUDA[twist_idx + NHalf]);
-                    // Rounding
-                    ct_CUDA[index].x = rint(ct_CUDA[index].x);
-                    ct_CUDA[index].y = rint(ct_CUDA[index].y);
-                    // acc + ct
-                    acc_CUDA[index].x += ct_CUDA[index].x;
-                    acc_CUDA[index].y += ct_CUDA[index].y;
-                    // Modulus Q
-                    acc_CUDA[index].x = static_cast<double>(static_cast<__int128_t>(acc_CUDA[index].x) % static_cast<__int128_t>(Q));
-                    if (acc_CUDA[index].x < 0)
-                        acc_CUDA[index].x += static_cast<double>(Q);
-                    acc_CUDA[index].y = static_cast<double>(static_cast<__int128_t>(acc_CUDA[index].y) % static_cast<__int128_t>(Q));
-                    if (acc_CUDA[index].y < 0)
-                        acc_CUDA[index].y += static_cast<double>(Q);
-                    // IFFT::stride shows how elements from a single FFT should be split between threads
                     index += IFFT::stride;
-                    twist_idx += IFFT::stride;
                 }
             }
+        }
+        grid.sync();
+
+        /* Twisting and moding */
+        // polynomial a
+        for (uint32_t i = gtid; i < NHalf; i += gdim) {
+            // twisting
+            ct_CUDA[i] = cuCmul(ct_CUDA[i], twiddleTable_CUDA[i + NHalf]);
+            // acc + round(ct)
+            acc_CUDA[i].x += rint(ct_CUDA[i].x);
+            acc_CUDA[i].y += rint(ct_CUDA[i].y);
+            // Modulus Q
+            if(modInt64){
+                acc_CUDA[i].x = static_cast<double>(static_cast<int64_t>(acc_CUDA[i].x) % static_cast<int64_t>(Q));
+                acc_CUDA[i].y = static_cast<double>(static_cast<int64_t>(acc_CUDA[i].y) % static_cast<int64_t>(Q));
+            }
+            else{
+                acc_CUDA[i].x = static_cast<double>(static_cast<__int128_t>(acc_CUDA[i].x) % static_cast<__int128_t>(Q));
+                acc_CUDA[i].y = static_cast<double>(static_cast<__int128_t>(acc_CUDA[i].y) % static_cast<__int128_t>(Q));
+            }
+            if (acc_CUDA[i].x < 0)
+                acc_CUDA[i].x += static_cast<double>(Q);
+            if (acc_CUDA[i].y < 0)
+                acc_CUDA[i].y += static_cast<double>(Q);
+        }
+        // polynomial b
+        for (uint32_t i = gtid + NHalf; i < N; i += gdim) {
+            // twisting
+            ct_CUDA[i] = cuCmul(ct_CUDA[i], twiddleTable_CUDA[i]);
+            // acc + round(ct)
+            acc_CUDA[i].x += rint(ct_CUDA[i].x);
+            acc_CUDA[i].y += rint(ct_CUDA[i].y);
+            // Modulus Q
+            if(modInt64){
+                acc_CUDA[i].x = static_cast<double>(static_cast<int64_t>(acc_CUDA[i].x) % static_cast<int64_t>(Q));
+                acc_CUDA[i].y = static_cast<double>(static_cast<int64_t>(acc_CUDA[i].y) % static_cast<int64_t>(Q));
+            }
+            else{
+                acc_CUDA[i].x = static_cast<double>(static_cast<__int128_t>(acc_CUDA[i].x) % static_cast<__int128_t>(Q));
+                acc_CUDA[i].y = static_cast<double>(static_cast<__int128_t>(acc_CUDA[i].y) % static_cast<__int128_t>(Q));
+            }
+            if (acc_CUDA[i].x < 0)
+                acc_CUDA[i].x += static_cast<double>(Q);
+            if (acc_CUDA[i].y < 0)
+                acc_CUDA[i].y += static_cast<double>(Q);
         }
         grid.sync();
     }
@@ -360,6 +388,7 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
     const uint32_t RGSW_size    = digitsG2 * 2 * NHalf;
     const int32_t gBits         = static_cast<int32_t>(log2(static_cast<double>(baseG)));
     const int32_t gBitsMaxBits  = 64 - gBits;
+    const bool modInt64         = Q > 4294967296 ? false : true; // Q > 2^32 or not
 
     /* cufftdx variables */
     using complex_type = typename FFT::value_type;
@@ -533,35 +562,64 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
             // Save results
             {
                 unsigned int index = offset + threadIdx.x;
-                unsigned int twist_idx = threadIdx.x;
                 for (unsigned i = 0; i < IFFT::elements_per_thread; i++) {
                     shared_mem[index] = thread_data[i];
-                    // twisting
-                    double temp = shared_mem[index].x* twiddleTable_CUDA[twist_idx + NHalf].x - shared_mem[index].y * twiddleTable_CUDA[twist_idx + NHalf].y;
-                    shared_mem[index].y = shared_mem[index].x* twiddleTable_CUDA[twist_idx + NHalf].y + shared_mem[index].y * twiddleTable_CUDA[twist_idx + NHalf].x;
-                    shared_mem[index].x = temp;
-                    // Rounding
-                    shared_mem[index].x = rint(shared_mem[index].x);
-                    shared_mem[index].y = rint(shared_mem[index].y);
-                    // acc + ct
-                    acc_CUDA[index].x += shared_mem[index].x;
-                    acc_CUDA[index].y += shared_mem[index].y;
-                    // Modulus Q
-                    acc_CUDA[index].x = static_cast<double>(static_cast<__int128_t>(acc_CUDA[index].x) % static_cast<__int128_t>(Q));
-                    if (acc_CUDA[index].x < 0)
-                        acc_CUDA[index].x += static_cast<double>(Q);
-                    acc_CUDA[index].y = static_cast<double>(static_cast<__int128_t>(acc_CUDA[index].y) % static_cast<__int128_t>(Q));
-                    if (acc_CUDA[index].y < 0)
-                        acc_CUDA[index].y += static_cast<double>(Q);
-                    // IFFT::stride shows how elements from a single FFT should be split between threads
                     index += IFFT::stride;
-                    twist_idx += IFFT::stride;
                 }
             }
         }
         else{ // must meet syncs made by IFFT
             for(uint32_t i = 0; i < syncNum; ++i)
                 __syncthreads();
+        }
+        __syncthreads();
+
+        /* Twisting and moding */
+        // polynomial a
+        for (uint32_t i = tid; i < NHalf; i += bdim) {
+            // twisting
+            double temp = shared_mem[i].x* twiddleTable_CUDA[i + NHalf].x - shared_mem[i].y * twiddleTable_CUDA[i + NHalf].y;
+            shared_mem[i].y = shared_mem[i].x* twiddleTable_CUDA[i + NHalf].y + shared_mem[i].y * twiddleTable_CUDA[i + NHalf].x;
+            shared_mem[i].x = temp;
+            // acc + round(ct)
+            acc_CUDA[i].x += rint(shared_mem[i].x);
+            acc_CUDA[i].y += rint(shared_mem[i].y);
+            // Modulus Q
+            if(modInt64){
+                acc_CUDA[i].x = static_cast<double>(static_cast<int64_t>(acc_CUDA[i].x) % static_cast<int64_t>(Q));
+                acc_CUDA[i].y = static_cast<double>(static_cast<int64_t>(acc_CUDA[i].y) % static_cast<int64_t>(Q));
+            }
+            else{
+                acc_CUDA[i].x = static_cast<double>(static_cast<__int128_t>(acc_CUDA[i].x) % static_cast<__int128_t>(Q));
+                acc_CUDA[i].y = static_cast<double>(static_cast<__int128_t>(acc_CUDA[i].y) % static_cast<__int128_t>(Q));
+            }
+            if (acc_CUDA[i].x < 0)
+                acc_CUDA[i].x += static_cast<double>(Q);
+            if (acc_CUDA[i].y < 0)
+                acc_CUDA[i].y += static_cast<double>(Q);
+        }
+        // polynomial b
+        for (uint32_t i = tid + NHalf; i < N; i += bdim) {
+            // twisting
+            double temp = shared_mem[i].x* twiddleTable_CUDA[i].x - shared_mem[i].y * twiddleTable_CUDA[i].y;
+            shared_mem[i].y = shared_mem[i].x* twiddleTable_CUDA[i].y + shared_mem[i].y * twiddleTable_CUDA[i].x;
+            shared_mem[i].x = temp;
+            // acc + round(ct)
+            acc_CUDA[i].x += rint(shared_mem[i].x);
+            acc_CUDA[i].y += rint(shared_mem[i].y);
+            // Modulus Q
+            if(modInt64){
+                acc_CUDA[i].x = static_cast<double>(static_cast<int64_t>(acc_CUDA[i].x) % static_cast<int64_t>(Q));
+                acc_CUDA[i].y = static_cast<double>(static_cast<int64_t>(acc_CUDA[i].y) % static_cast<int64_t>(Q));
+            }
+            else{
+                acc_CUDA[i].x = static_cast<double>(static_cast<__int128_t>(acc_CUDA[i].x) % static_cast<__int128_t>(Q));
+                acc_CUDA[i].y = static_cast<double>(static_cast<__int128_t>(acc_CUDA[i].y) % static_cast<__int128_t>(Q));
+            }
+            if (acc_CUDA[i].x < 0)
+                acc_CUDA[i].x += static_cast<double>(Q);
+            if (acc_CUDA[i].y < 0)
+                acc_CUDA[i].y += static_cast<double>(Q);
         }
         __syncthreads();
     }
