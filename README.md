@@ -31,7 +31,10 @@ A high-performance library that leverages GPU acceleration to boost the TFHE (Fu
 To successfully build and use **openFHE-GPU**, you need the following prerequisites:
 
 - CMake version 3.18 or higher
-- A compatible GPU with CUDA compatibility >= 7.0
+- Supported host compiler (C++17 required)
+- GCC 7+
+- CUDA Compute Compatibility: Tested with compute compatibility 8.6 and 8.9
+- NVCC: Version 11.0.194 or newer (CUDA Toolkit 11.0 or newer)
 
 ### Building
 
