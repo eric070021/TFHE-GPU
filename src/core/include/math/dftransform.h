@@ -44,7 +44,6 @@
 #include <thread>
 #include <vector>
 #include <cstdint>
-#include "fftw3.h"
 
 #include "math/hal.h"
 #include "math/nbtheory.h"

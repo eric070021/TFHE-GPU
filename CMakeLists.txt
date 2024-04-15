@@ -679,14 +679,14 @@ if( BUILD_UNITTESTS )
 endif()
 
 # Add the path to FFTW3 header files
-include_directories(fftw-3.3.10/include)
+#include_directories(fftw-3.3.10/include)
 # Add the path to cufftdx header files
 include_directories(nvidia-mathdx-22.11.0-Linux/nvidia/mathdx/22.11/include)
 include_directories(nvidia-mathdx-22.11.0-Linux/nvidia/mathdx/22.11/include/cufftdx/include/)
 # Add the path to cuda header files
 include_directories(/usr/local/cuda/include)
 # Add the path to the FFTW3 shared library
-link_directories(fftw-3.3.10/lib)
+#link_directories(fftw-3.3.10/lib)
 
 ### add each of the subdirs of src
 add_subdirectory(src/core)

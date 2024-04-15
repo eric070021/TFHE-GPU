@@ -47,8 +47,8 @@ std::vector<uint32_t> DiscreteFourierTransform::m_rotGroup;
 /// precomputed ksi powers
 std::vector<std::complex<double>> DiscreteFourierTransform::m_ksiPows;
 // fftw variables
-fftw_complex *in;
-fftw_plan forward_fft, inverse_fft;
+// fftw_complex *in;
+// fftw_plan forward_fft, inverse_fft;
 Complex* DiscreteFourierTransform::twiddleTable = nullptr;
 
 void DiscreteFourierTransform::Reset() {
