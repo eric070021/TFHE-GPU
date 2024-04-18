@@ -402,7 +402,7 @@ public:
    */
     std::vector<std::vector<LWECiphertext>> EvalDecomp(const std::vector<LWECiphertext>& ct) const;
 
-    void GPUSetup() const;
+    void GPUSetup(int numGPUs = 0) const;
 
     void GPUClean() const;
 

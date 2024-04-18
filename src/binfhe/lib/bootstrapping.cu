@@ -697,7 +697,7 @@ __global__ void cuFFTDxFWD(Complex_d* data, Complex_d* twiddleTable_CUDA){
     }
 }
 
-void GPUFFTBootstrap::GPUSetup(const std::shared_ptr<BinFHECryptoParams> params, RingGSWACCKey BSkey, LWESwitchingKey KSkey)
+void GPUFFTBootstrap::GPUSetup(const std::shared_ptr<BinFHECryptoParams> params, RingGSWACCKey BSkey, LWESwitchingKey KSkey, int numGPUs)
 {
     /* Setting up available GPU INFO */
     int deviceCount;
@@ -708,7 +708,12 @@ void GPUFFTBootstrap::GPUSetup(const std::shared_ptr<BinFHECryptoParams> params,
         return;
     }
 
-    for (int device = 0; device < deviceCount; ++device) {
+    /* Determine the number of GPUs to use*/
+    int GPUcount;
+    if(numGPUs > 0 && numGPUs <= deviceCount) GPUcount = numGPUs;
+    else GPUcount = deviceCount;
+
+    for (int device = 0; device < GPUcount; ++device) {
         cudaSetDevice(device);
         cudaDeviceProp deviceProperties;
         cudaGetDeviceProperties(&deviceProperties, device);

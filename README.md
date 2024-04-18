@@ -63,8 +63,10 @@ To build the project, follow these steps:
 
 ### GPU Setup
 Make sure to call this api after generating bootstrapping key.
+- **Input**:
+  - Number of GPUs to use (default using all available GPUs)
 ```cpp
-cc.GPUSetup();
+cc.GPUSetup(int numGPUs);
 ```
 
 ### GPU Clean
@@ -156,7 +158,7 @@ int main() {
 
     // Sample Program: Step 3: Setup GPU
     std::cout << "Setting up GPU..." << std::endl;
-
+    // default using all GPUs
     cc.GPUSetup();
 
     std::cout << "Completed the GPU Setup." << std::endl;

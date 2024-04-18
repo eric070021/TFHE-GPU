@@ -83,7 +83,7 @@ public:
      * @param BSkey Bootstrapping key
      * @param KSkey keyswitching key
      */
-    static void GPUSetup(const std::shared_ptr<BinFHECryptoParams> params, RingGSWACCKey BSkey, LWESwitchingKey KSkey);
+    static void GPUSetup(const std::shared_ptr<BinFHECryptoParams> params, RingGSWACCKey BSkey, LWESwitchingKey KSkey, int numGPUs);
 
     /**
      * Clean GPU global memory

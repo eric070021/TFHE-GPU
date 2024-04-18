@@ -342,7 +342,7 @@ std::vector<std::vector<LWECiphertext>> BinFHEContext::EvalDecomp(const std::vec
     return (*m_binfhescheme->EvalDecomp(m_params, m_BTKey, ct, GetBeta()));
 }
 
-void BinFHEContext::GPUSetup() const{
+void BinFHEContext::GPUSetup(int numGPUs) const{
     if(m_timeOptimization){
         std::string errMsg("ERROR: Time optimization is not supported in GPU");
         OPENFHE_THROW(not_implemented_error, errMsg);
@@ -351,7 +351,7 @@ void BinFHEContext::GPUSetup() const{
         std::string errMsg("ERROR: Need to call BTKeyGen before calling GPUSetup");
         OPENFHE_THROW(openfhe_error, errMsg);
     }
-    GPUFFTBootstrap::GPUSetup(m_params, m_BTKey.BSkey, m_BTKey.KSkey); 
+    GPUFFTBootstrap::GPUSetup(m_params, m_BTKey.BSkey, m_BTKey.KSkey, numGPUs); 
 }
 
 void BinFHEContext::GPUClean() const{
