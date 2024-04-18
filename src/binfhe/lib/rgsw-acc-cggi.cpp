@@ -220,7 +220,8 @@ RingGSWEvalKey RingGSWAccumulatorCGGI::KeyGenCGGI(const std::shared_ptr<RingGSWC
     dug.SetModulus(Q);
 
     // approximate gadget decomposition is used; the first digit is ignored
-    uint32_t digitsG2{(params->GetDigitsG() - 1) << 1};
+    uint32_t numDigitsToThrow = params->GetNumDigitsToThrow();
+    uint32_t digitsG2{(params->GetDigitsG() - numDigitsToThrow) << 1};
 
     std::vector<NativePoly> tempA(digitsG2, NativePoly(dug, polyParams, Format::COEFFICIENT));
     RingGSWEvalKeyImpl result(digitsG2, 2);
@@ -230,7 +231,7 @@ RingGSWEvalKey RingGSWAccumulatorCGGI::KeyGenCGGI(const std::shared_ptr<RingGSWC
         tempA[i].SetFormat(Format::EVALUATION);
         result[i][1] = NativePoly(params->GetDgg(), polyParams, Format::COEFFICIENT);
         if (m)
-            result[i][i & 0x1][0].ModAddFastEq(Gpow[(i >> 1) + 1], Q);
+            result[i][i & 0x1][0].ModAddFastEq(Gpow[(i >> 1) + numDigitsToThrow], Q);
         result[i][0].SetFormat(Format::EVALUATION);
         result[i][1].SetFormat(Format::EVALUATION);
         result[i][1] += (tempA[i] *= skNTT);
@@ -247,7 +248,8 @@ void RingGSWAccumulatorCGGI::AddToAccCGGI(const std::shared_ptr<RingGSWCryptoPar
     // cycltomic order
     uint64_t MInt = 2 * params->GetN();
     NativeInteger M(MInt);
-    uint32_t digitsG2 = (params->GetDigitsG() - 1) << 1;
+    uint32_t numDigitsToThrow = params->GetNumDigitsToThrow();
+    uint32_t digitsG2 = (params->GetDigitsG() - numDigitsToThrow) << 1;
     auto polyParams   = params->GetPolyParams();
 
     std::vector<NativePoly> ct = acc->GetElements();
@@ -311,7 +313,8 @@ std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> RingGSWAccumulat
     NativeInteger QHalf = Q >> 1;
     NativeInteger::SignedNativeInt Q_int = Q.ConvertToInt();
     uint32_t N        = params->GetN();
-    uint32_t digitsG  = params->GetDigitsG();
+    uint32_t numDigitsToThrow = params->GetNumDigitsToThrow();
+    uint32_t digitsG  = params->GetDigitsG() - numDigitsToThrow;
     uint32_t digitsG2 = digitsG << 1;
     auto Gpow         = params->GetGPower();
     auto polyParams   = params->GetPolyParams();
@@ -411,8 +414,8 @@ std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> RingGSWAccumulat
     NativeInteger Q   = params->GetQ();
     NativeInteger QHalf = Q >> 1;
     NativeInteger::SignedNativeInt Q_int = Q.ConvertToInt();
-    uint32_t digitsG  = params->GetDigitsG();
-    uint32_t digitsG2 = (digitsG - 1) << 1;
+    uint32_t numDigitsToThrow = params->GetNumDigitsToThrow();
+    uint32_t digitsG2 = (params->GetDigitsG() - numDigitsToThrow) << 1;
     uint32_t N        = params->GetN();
 
     auto ek_d = std::make_shared<std::vector<std::vector<std::vector<Complex>>>>
@@ -444,7 +447,8 @@ void RingGSWAccumulatorCGGI::AddToAccCGGI_FFT(const std::shared_ptr<RingGSWCrypt
  
     uint64_t MInt = 2 * params->GetN();
     NativeInteger M(MInt);
-    uint32_t digitsG2 = (params->GetDigitsG() - 1) << 1;
+    uint32_t numDigitsToThrow = params->GetNumDigitsToThrow();
+    uint32_t digitsG2 = (params->GetDigitsG() - numDigitsToThrow) << 1;
     auto polyParams   = params->GetPolyParams();
     auto Q            = params->GetQ();
     NativeInteger QHalf = Q >> 1;
