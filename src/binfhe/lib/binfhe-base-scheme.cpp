@@ -535,12 +535,12 @@ template <typename Func>
 LWECiphertext BinFHEScheme::BootstrapFunc(const std::shared_ptr<BinFHECryptoParams> params, const RingGSWBTKey& EK,
                                           ConstLWECiphertext ct, const Func f, const NativeInteger fmod) const {
     
-    auto acc_FFT = BootstrapFuncCore(params, EK.BSkey, ct, f, fmod, "GPU");
+    auto acc_FFT = BootstrapFuncCore(params, EK.BSkey, ct, f, fmod, "NTT");
 
     std::vector<NativePoly>& accVec_FFT = acc_FFT->GetElements();
     // the accumulator result is encrypted w.r.t. the transposed secret key
     // we can transpose "a" to get an encryption under the original secret key
-    //accVec_FFT[0] = accVec_FFT[0].Transpose();
+    accVec_FFT[0] = accVec_FFT[0].Transpose();
     accVec_FFT[0].SetFormat(Format::COEFFICIENT);
     accVec_FFT[1].SetFormat(Format::COEFFICIENT);
 

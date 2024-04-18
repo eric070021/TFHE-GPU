@@ -58,7 +58,8 @@ void RingGSWAccumulator::SignedDigitDecompose(const std::shared_ptr<RingGSWCrypt
                                               const std::vector<NativePoly>& input,
                                               std::vector<NativePoly>& output) const {
     uint32_t N                           = params->GetN();
-    uint32_t digitsG                     = params->GetDigitsG() - 1;
+    uint32_t numDigitsToThrow            = params->GetNumDigitsToThrow();
+    uint32_t digitsG                     = params->GetDigitsG() - numDigitsToThrow;
     NativeInteger Q                      = params->GetQ();
     NativeInteger QHalf                  = Q >> 1;
     NativeInteger::SignedNativeInt Q_int = Q.ConvertToInt();
@@ -80,9 +81,12 @@ void RingGSWAccumulator::SignedDigitDecompose(const std::shared_ptr<RingGSWCrypt
         for (size_t k = 0; k < N; ++k) {
             const NativeInteger& t           = input[j][k];
             NativeInteger::SignedNativeInt d = (t < QHalf) ? t.ConvertToInt() : (t.ConvertToInt() - Q_int);
+            NativeInteger::SignedNativeInt r;
 
-            NativeInteger::SignedNativeInt r = (d << gBitsMaxBits) >> gBitsMaxBits;
-            d = (d - r) >> gBits;
+            for(uint32_t i = 0; i < numDigitsToThrow; i++){
+                r = (d << gBitsMaxBits) >> gBitsMaxBits;
+                d = (d - r) >> gBits;
+            }
 
             for (size_t l = 0; l < digitsG; ++l) {
                 // remainder is signed
@@ -109,7 +113,8 @@ void RingGSWAccumulator::SignedDigitDecompose(const std::shared_ptr<RingGSWCrypt
 void RingGSWAccumulator::SignedDigitDecompose_FFT(const std::shared_ptr<RingGSWCryptoParams> params, const std::vector<std::vector<Complex>>& input,
                                     std::vector<std::vector<Complex>>& output) const{
     uint32_t N                           = params->GetN();
-    uint32_t digitsG                     = params->GetDigitsG() - 1;
+    uint32_t numDigitsToThrow            = params->GetNumDigitsToThrow();
+    uint32_t digitsG                     = params->GetDigitsG() - numDigitsToThrow;
     NativeInteger Q                      = params->GetQ();
     NativeInteger QHalf                  = Q >> 1;
     NativeInteger::SignedNativeInt Q_int = Q.ConvertToInt();
@@ -131,9 +136,12 @@ void RingGSWAccumulator::SignedDigitDecompose_FFT(const std::shared_ptr<RingGSWC
         for (size_t k = 0; k < N; ++k) {
             const uint64_t& t    = static_cast<uint64_t>(input[j][k].real());
             NativeInteger::SignedNativeInt d = (t < QHalf.ConvertToInt()) ? t : (static_cast<int64_t>(t) - Q_int);
+            NativeInteger::SignedNativeInt r;
 
-            NativeInteger::SignedNativeInt r = (d << gBitsMaxBits) >> gBitsMaxBits;
-            d = (d - r) >> gBits;
+            for(uint32_t i = 0; i < numDigitsToThrow; i++){
+                r = (d << gBitsMaxBits) >> gBitsMaxBits;
+                d = (d - r) >> gBits;
+            }
 
             for (size_t l = 0; l < digitsG; ++l) {
                 // remainder is signed
