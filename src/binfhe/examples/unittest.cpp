@@ -6,7 +6,7 @@ void EvalFuncDiffLUTTest(){
     std::cout << "EvalFunc using different LUTs Test: " << std::endl;
 
     auto cc = BinFHEContext();
-    cc.GenerateBinFHEContext(STD128, true, 12);
+    cc.GenerateBinFHEContext(STD128, true, 12, 0, GINX, false, 0, 1);
     auto sk = cc.KeyGen();
     cc.BTKeyGen(sk);
     cc.GPUSetup();
@@ -65,7 +65,7 @@ void EvalFuncTest(){
     std::cout << "EvalFunc Test: " << std::endl;
 
     auto cc = BinFHEContext();
-    cc.GenerateBinFHEContext(STD128, true, 12);
+    cc.GenerateBinFHEContext(STD128, true, 12, 0, GINX, false, 0, 1);
     auto sk = cc.KeyGen();
     cc.BTKeyGen(sk);
     cc.GPUSetup();
@@ -151,7 +151,7 @@ void EvalFloorTest(){
     std::cout << "EvalFloorTest Test: " << std::endl;
 
     auto cc = BinFHEContext();
-    cc.GenerateBinFHEContext(STD128, false);
+    cc.GenerateBinFHEContext(STD128, false, 11, 0, GINX, false, 0, 1);
     auto sk = cc.KeyGen();
     cc.BTKeyGen(sk);
     cc.GPUSetup();
@@ -183,7 +183,7 @@ void EvalSignTest(){
 
     auto cc = BinFHEContext();
     uint32_t logQ = 17;
-    cc.GenerateBinFHEContext(STD128, false, logQ, 0, GINX, false);
+    cc.GenerateBinFHEContext(STD128, false, logQ, 0, GINX, false, 0, 1);
     auto sk = cc.KeyGen();
     cc.BTKeyGen(sk);
     cc.GPUSetup();
@@ -218,7 +218,7 @@ void EvalDecompTest(){
 
     auto cc = BinFHEContext();
     uint32_t logQ = 23;
-    cc.GenerateBinFHEContext(STD128, false, logQ, 0, GINX, false);
+    cc.GenerateBinFHEContext(STD128, false, logQ, 0, GINX, false, 0, 1);
     auto sk = cc.KeyGen();
     cc.BTKeyGen(sk);
     cc.GPUSetup();
