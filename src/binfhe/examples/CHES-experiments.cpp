@@ -34,13 +34,14 @@
  */
 
 #include "binfhecontext.h"
+#include <algorithm>
 
 using namespace lbcrypto;
 
 int main() {
     // Sample Program: Step 1: Set CryptoContext
     auto cc = BinFHEContext();
-    cc.GenerateBinFHEContext(STD128, true, 12);
+    cc.GenerateBinFHEContext(STD128, true, 12, 0, GINX, false, 1 << 18);
 
     // Sample Program: Step 2: Key Generation
 
@@ -53,6 +54,13 @@ int main() {
     cc.BTKeyGen(sk);
 
     std::cout << "Completed the key generation." << std::endl;
+
+    std::cout << "Setting up GPU..." << std::endl;
+
+    // Setup GPU
+    cc.GPUSetup();
+
+    std::cout << "Completed the GPU Setup." << std::endl;
 
     // Sample Program: Step 3: Create the to-be-evaluated funciton and obtain its corresponding LUT
     int p = cc.GetMaxPlaintextSpace().ConvertToInt();  // Obtain the maximum plaintext space
@@ -67,21 +75,30 @@ int main() {
 
     // Generate LUT from function f(x)
     auto lut = cc.GenerateLUTviaFunction(fp, p);
-    std::cout << "Evaluate x^3%" << p << "." << std::endl;
 
-    // Sample Program: Step 4: evalute f(x) homomorphically and decrypt
-    // Note that we check for all the possible plaintexts.
-    for (int i = 0; i < p; i++) {
-        auto ct1 = cc.Encrypt(sk, i % p, FRESH, p);
-
-        auto ct_cube = cc.EvalFunc(ct1, lut);
-
-        LWEPlaintext result;
-
-        cc.Decrypt(sk, ct_cube, &result, p);
-
-        std::cout << "Input: " << i << ". Expected: " << fp(i, p) << ". Evaluated = " << result << std::endl;
+    for(int round = 1; round <= 512; round++){
+        std::vector<LWECiphertext> ct_vec;
+        for (int i = 0; i < round; i++) {
+            auto ct1 = cc.Encrypt(sk, i % p, FRESH, p);
+            ct_vec.push_back(ct1);
+        }
+        // warm up
+        auto ct_cube_vec = cc.EvalFunc(ct_vec, lut);
+        
+        // Get average of 5 runs
+        std::vector<double> times;
+        for(int i = 0; i < 5; i++){
+            auto start = std::chrono::high_resolution_clock::now();
+            ct_cube_vec = cc.EvalFunc(ct_vec, lut);
+            auto end = std::chrono::high_resolution_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start);
+            times.push_back(elapsed.count());
+        }
+       
+        std::cout << std::accumulate(times.begin(), times.end(), 0.0) / times.size() << ", " << std::flush;
     }
 
+    cc.GPUClean();
+    
     return 0;
 }
