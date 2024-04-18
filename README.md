@@ -57,6 +57,7 @@ To build the project, follow these steps:
 4. Run the example to test the library:
 ```bash
    ./build_release/bin/examples/binfhe/unittest
+   ./build_release/bin/examples/binfhe/time-estimate
 ```
 ## Supported APIs
 

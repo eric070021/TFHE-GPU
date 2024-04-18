@@ -38,6 +38,39 @@
 
 using namespace lbcrypto;
 
+void TFHE_rs_Compare(){
+    std::cout << "EvalBinGate Test: " << std::endl;
+
+    auto cc = BinFHEContext();
+    cc.GenerateBinFHEContext(STD128);
+    auto sk = cc.KeyGen();
+    cc.BTKeyGen(sk);
+    cc.GPUSetup();
+
+    std::vector<LWECiphertext> ct1_vec, ct2_vec;
+    for (int i = 0; i < 256; i++) {
+        auto ct1 = cc.Encrypt(sk, 1);
+        auto ct2 = cc.Encrypt(sk, 1);
+        ct1_vec.push_back(ct1);
+        ct2_vec.push_back(ct2);
+    }
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < 1000; i++)
+        auto ctNAND = cc.EvalBinGate(AND, ct1_vec, ct2_vec);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end-start);
+    std::cout << "EvalBinGate Time: " << elapsed.count() << " us" << std::endl;
+
+    // LWEPlaintext result;
+    // cc.Decrypt(sk, ctNAND[0], &result);
+    // std::cout << "1 NAND 1 = " << result << std::endl;
+
+    std::cout << "--------------------------------" << std::endl;
+
+    cc.GPUClean();
+}
+
 int main() {
     // Sample Program: Step 1: Set CryptoContext
     auto cc = BinFHEContext();
