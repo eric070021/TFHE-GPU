@@ -212,42 +212,31 @@ void RingGSWAccumulatorCGGI::EvalAcc(const std::shared_ptr<RingGSWCryptoParams> 
 // Encryption for the CGGI variant, as described in https://eprint.iacr.org/2020/086
 RingGSWEvalKey RingGSWAccumulatorCGGI::KeyGenCGGI(const std::shared_ptr<RingGSWCryptoParams> params,
                                                   const NativePoly& skNTT, const LWEPlaintext& m) const {
-    NativeInteger Q   = params->GetQ();
-    uint32_t digitsG  = params->GetDigitsG();
-    uint32_t digitsG2 = digitsG << 1;
-    auto Gpow         = params->GetGPower();
-    auto polyParams   = params->GetPolyParams();
-    auto result       = std::make_shared<RingGSWEvalKeyImpl>(digitsG2, 2);
+    const auto& Gpow       = params->GetGPower();
+    const auto& polyParams = params->GetPolyParams();
 
     DiscreteUniformGeneratorImpl<NativeVector> dug;
+    NativeInteger Q{params->GetQ()};
     dug.SetModulus(Q);
 
-    // tempA is introduced to minimize the number of NTTs
-    std::vector<NativePoly> tempA(digitsG2);
+    // approximate gadget decomposition is used; the first digit is ignored
+    uint32_t numDigitsToThrow = params->GetNumDigitsToThrow();
+    uint32_t digitsG2{(params->GetDigitsG() - numDigitsToThrow) << 1};
 
-    for (size_t i = 0; i < digitsG2; ++i) {
-        (*result)[i][0] = NativePoly(dug, polyParams, Format::COEFFICIENT);
-        tempA[i]        = (*result)[i][0];
-        (*result)[i][1] = NativePoly(params->GetDgg(), polyParams, Format::COEFFICIENT);
-    }
+    std::vector<NativePoly> tempA(digitsG2, NativePoly(dug, polyParams, Format::COEFFICIENT));
+    RingGSWEvalKeyImpl result(digitsG2, 2);
 
-    if (m > 0) {
-        for (size_t i = 0; i < digitsG; ++i) {
-            // Add G Multiple
-            (*result)[2 * i][0][0].ModAddEq(Gpow[i], Q);
-            // [a,as+e] + G
-            (*result)[2 * i + 1][1][0].ModAddEq(Gpow[i], Q);
-        }
-    }
-
-    // 3*digitsG2 NTTs are called
-    result->SetFormat(Format::EVALUATION);
-    for (size_t i = 0; i < digitsG2; ++i) {
+    for (uint32_t i = 0; i < digitsG2; ++i) {
+        result[i][0] = tempA[i];
         tempA[i].SetFormat(Format::EVALUATION);
-        (*result)[i][1] += tempA[i] * skNTT;
+        result[i][1] = NativePoly(params->GetDgg(), polyParams, Format::COEFFICIENT);
+        if (m)
+            result[i][i & 0x1][0].ModAddFastEq(Gpow[(i >> 1) + numDigitsToThrow], Q);
+        result[i][0].SetFormat(Format::EVALUATION);
+        result[i][1].SetFormat(Format::EVALUATION);
+        result[i][1] += (tempA[i] *= skNTT);
     }
-
-    return result;
+    return std::make_shared<RingGSWEvalKeyImpl>(result);
 }
 
 // CGGI Accumulation as described in https://eprint.iacr.org/2020/086
@@ -259,7 +248,8 @@ void RingGSWAccumulatorCGGI::AddToAccCGGI(const std::shared_ptr<RingGSWCryptoPar
     // cycltomic order
     uint64_t MInt = 2 * params->GetN();
     NativeInteger M(MInt);
-    uint32_t digitsG2 = params->GetDigitsG() << 1;
+    uint32_t numDigitsToThrow = params->GetNumDigitsToThrow();
+    uint32_t digitsG2 = (params->GetDigitsG() - numDigitsToThrow) << 1;
     auto polyParams   = params->GetPolyParams();
 
     std::vector<NativePoly> ct = acc->GetElements();
@@ -323,7 +313,8 @@ std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> RingGSWAccumulat
     NativeInteger QHalf = Q >> 1;
     NativeInteger::SignedNativeInt Q_int = Q.ConvertToInt();
     uint32_t N        = params->GetN();
-    uint32_t digitsG  = params->GetDigitsG();
+    uint32_t numDigitsToThrow = params->GetNumDigitsToThrow();
+    uint32_t digitsG  = params->GetDigitsG() - numDigitsToThrow;
     uint32_t digitsG2 = digitsG << 1;
     auto Gpow         = params->GetGPower();
     auto polyParams   = params->GetPolyParams();
@@ -423,8 +414,8 @@ std::shared_ptr<std::vector<std::vector<std::vector<Complex>>>> RingGSWAccumulat
     NativeInteger Q   = params->GetQ();
     NativeInteger QHalf = Q >> 1;
     NativeInteger::SignedNativeInt Q_int = Q.ConvertToInt();
-    uint32_t digitsG  = params->GetDigitsG();
-    uint32_t digitsG2 = digitsG << 1;
+    uint32_t numDigitsToThrow = params->GetNumDigitsToThrow();
+    uint32_t digitsG2 = (params->GetDigitsG() - numDigitsToThrow) << 1;
     uint32_t N        = params->GetN();
 
     auto ek_d = std::make_shared<std::vector<std::vector<std::vector<Complex>>>>
@@ -456,7 +447,8 @@ void RingGSWAccumulatorCGGI::AddToAccCGGI_FFT(const std::shared_ptr<RingGSWCrypt
  
     uint64_t MInt = 2 * params->GetN();
     NativeInteger M(MInt);
-    uint32_t digitsG2 = params->GetDigitsG() << 1;
+    uint32_t numDigitsToThrow = params->GetNumDigitsToThrow();
+    uint32_t digitsG2 = (params->GetDigitsG() - numDigitsToThrow) << 1;
     auto polyParams   = params->GetPolyParams();
     auto Q            = params->GetQ();
     NativeInteger QHalf = Q >> 1;

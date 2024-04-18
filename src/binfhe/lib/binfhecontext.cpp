@@ -49,7 +49,7 @@ void BinFHEContext::GenerateBinFHEContext(uint32_t n, uint32_t N, const NativeIn
 }
 
 void BinFHEContext::GenerateBinFHEContext(BINFHE_PARAMSET set, bool arbFunc, uint32_t logQ, int64_t N,
-                                          BINFHE_METHOD method, bool timeOptimization, uint32_t baseG) {
+                                          BINFHE_METHOD method, bool timeOptimization, uint32_t baseG, uint32_t numDigitsToThrow) {
     if (GINX != method) {
         std::string errMsg("ERROR: CGGI is the only supported method");
         OPENFHE_THROW(not_implemented_error, errMsg);
@@ -102,7 +102,7 @@ void BinFHEContext::GenerateBinFHEContext(BINFHE_PARAMSET set, bool arbFunc, uin
     uint32_t n      = (set == TOY) ? 32 : 1305;
     auto lweparams  = std::make_shared<LWECryptoParams>(n, ringDim, q, Q, qKS, 3.19, 32);
     auto rgswparams = std::make_shared<RingGSWCryptoParams>(ringDim, Q, q, baseG, 23, method, 3.19,
-                                                            ((logQ != 11) && timeOptimization));
+                                                            ((logQ != 11) && timeOptimization), numDigitsToThrow);
 
     m_params       = std::make_shared<BinFHECryptoParams>(lweparams, rgswparams);
     m_binfhescheme = std::make_shared<BinFHEScheme>(method);
@@ -129,29 +129,30 @@ void BinFHEContext::GenerateBinFHEContext(BINFHE_PARAMSET set, BINFHE_METHOD met
         // for Ring GSW + LWE parameters
         usint gadgetBase;  // gadget base used in the bootstrapping
         usint baseRK;      // base for the refreshing key
+        usint numDigitsToThrow; // number of digits to throw in the bootstrapping
     };
     enum { PRIME = 0 };  // value for modKS if you want to use the intermediate prime for modulus for key switching
     const double STD_DEV = 3.19;
     // clang-format off
     const std::unordered_map<BINFHE_PARAMSET, BinFHEContextParams> paramsMap({
-        //           numberBits|cyclOrder|latticeParam|  mod|   modKS|  stdDev| baseKS| gadgetBase|baseRK
-        { TOY,             { 27,     1024,          64,  512,   PRIME, STD_DEV,     25,    1 <<  9,  23 } },
-        { MEDIUM,          { 28,     2048,         422, 1024, 1 << 14, STD_DEV, 1 << 7,    1 << 10,  32 } },
-        { STD128_AP,       { 27,     2048,         512, 1024, 1 << 14, STD_DEV, 1 << 7,    1 <<  9,  32 } },
-        { STD128_APOPT,    { 27,     2048,         502, 1024, 1 << 14, STD_DEV, 1 << 7,    1 <<  9,  32 } },
-        { STD128,          { 27,     2048,         512, 1024, 1 << 14, STD_DEV, 1 << 7,    1 <<  7,  32 } },
-        { STD128_OPT,      { 27,     2048,         502, 1024, 1 << 14, STD_DEV, 1 << 7,    1 <<  7,  32 } },
-        { STD192,          { 37,     4096,        1024, 1024, 1 << 19, STD_DEV,     28,    1 << 14,  32 } },
-        { STD192_OPT,      { 37,     4096,         805, 1024, 1 << 15, STD_DEV,     32,    1 << 13,  32 } },
-        { STD256,          { 29,     4096,        1024, 2048, 1 << 14, STD_DEV, 1 << 7,    1 <<  8,  46 } },
-        { STD256_OPT,      { 29,     4096,         990, 2048, 1 << 14, STD_DEV, 1 << 7,    1 <<  8,  46 } },
-        { STD128Q,         { 50,     4096,        1024, 1024, 1 << 25, STD_DEV,     32,    1 << 25,  32 } },
-        { STD128Q_OPT,     { 50,     4096,         585, 1024, 1 << 15, STD_DEV,     32,    1 << 25,  32 } },
-        { STD192Q,         { 35,     4096,        1024, 1024, 1 << 17, STD_DEV,     64,    1 << 14,  32 } },
-        { STD192Q_OPT,     { 35,     4096,         875, 1024, 1 << 15, STD_DEV,     32,    1 << 12,  32 } },
-        { STD256Q,         { 27,     4096,        2048, 2048, 1 << 16, STD_DEV,     16,    1 <<  7,  46 } },
-        { STD256Q_OPT,     { 27,     4096,        1225, 1024, 1 << 16, STD_DEV,     16,    1 <<  7,  32 } },
-        { SIGNED_MOD_TEST, { 28,     2048,         512, 1024,   PRIME, STD_DEV,     25,    1 <<  7,  23 } },
+        //           numberBits|cyclOrder|latticeParam|  mod|   modKS|  stdDev| baseKS| gadgetBase|baseRK|numDigitsToThrow
+        { TOY,             { 27,     1024,          64,  512,   PRIME, STD_DEV,     25,    1 <<  9,    23, 0 } },
+        { MEDIUM,          { 28,     2048,         422, 1024, 1 << 14, STD_DEV, 1 << 7,    1 << 10,    32, 0 } },
+        { STD128_AP,       { 27,     2048,         512, 1024, 1 << 14, STD_DEV, 1 << 7,    1 <<  9,    32, 0 } },
+        { STD128_APOPT,    { 27,     2048,         502, 1024, 1 << 14, STD_DEV, 1 << 7,    1 <<  9,    32, 0 } },
+        { STD128,          { 27,     2048,         512, 1024, 1 << 14, STD_DEV, 1 << 7,    1 <<  7,    32, 1 } },
+        { STD128_OPT,      { 27,     2048,         502, 1024, 1 << 14, STD_DEV, 1 << 7,    1 <<  7,    32, 0 } },
+        { STD192,          { 37,     4096,        1024, 1024, 1 << 19, STD_DEV,     28,    1 << 14,    32, 0 } },
+        { STD192_OPT,      { 37,     4096,         805, 1024, 1 << 15, STD_DEV,     32,    1 << 13,    32, 0 } },
+        { STD256,          { 29,     4096,        1024, 2048, 1 << 14, STD_DEV, 1 << 7,    1 <<  8,    46, 0 } },
+        { STD256_OPT,      { 29,     4096,         990, 2048, 1 << 14, STD_DEV, 1 << 7,    1 <<  8,    46, 0 } },
+        { STD128Q,         { 50,     4096,        1024, 1024, 1 << 25, STD_DEV,     32,    1 << 25,    32, 0 } },
+        { STD128Q_OPT,     { 50,     4096,         585, 1024, 1 << 15, STD_DEV,     32,    1 << 25,    32, 0 } },
+        { STD192Q,         { 35,     4096,        1024, 1024, 1 << 17, STD_DEV,     64,    1 << 14,    32, 0 } },
+        { STD192Q_OPT,     { 35,     4096,         875, 1024, 1 << 15, STD_DEV,     32,    1 << 12,    32, 0 } },
+        { STD256Q,         { 27,     4096,        2048, 2048, 1 << 16, STD_DEV,     16,    1 <<  7,    46, 0 } },
+        { STD256Q_OPT,     { 27,     4096,        1225, 1024, 1 << 16, STD_DEV,     16,    1 <<  7,    32, 0 } },
+        { SIGNED_MOD_TEST, { 28,     2048,         512, 1024,   PRIME, STD_DEV,     25,    1 <<  7,    23, 0 } },
     });
     // clang-format on
 
@@ -173,7 +174,7 @@ void BinFHEContext::GenerateBinFHEContext(BINFHE_PARAMSET set, BINFHE_METHOD met
                          std::make_shared<LWECryptoParams>(params.latticeParam, ringDim, params.mod, Q, params.modKS,
                                                            params.stdDev, params.baseKS);
     auto rgswparams = std::make_shared<RingGSWCryptoParams>(ringDim, Q, params.mod, params.gadgetBase, params.baseRK,
-                                                            method, params.stdDev);
+                                                            method, params.stdDev, false, params.numDigitsToThrow);
 
     m_params       = std::make_shared<BinFHECryptoParams>(lweparams, rgswparams);
     m_binfhescheme = std::make_shared<BinFHEScheme>(method);

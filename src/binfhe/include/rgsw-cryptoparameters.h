@@ -69,8 +69,8 @@ public:
    * @param method bootstrapping method (DM or CGGI)
    */
     explicit RingGSWCryptoParams(uint32_t N, NativeInteger Q, NativeInteger q, uint32_t baseG, uint32_t baseR,
-                                 BINFHE_METHOD method, double std, bool signEval = false)
-        : m_N(N), m_Q(Q), m_q(q), m_baseG(baseG), m_baseR(baseR), m_method(method) {
+                                 BINFHE_METHOD method, double std, bool signEval = false, uint32_t numDigitsToThrow = 0)
+        : m_N(N), m_Q(Q), m_q(q), m_baseG(baseG), m_numDigitsToThrow(numDigitsToThrow), m_baseR(baseR), m_method(method) {
         if (!IsPowerOfTwo(baseG)) {
             OPENFHE_THROW(config_error, "Gadget base should be a power of two.");
         }
@@ -94,6 +94,11 @@ public:
                 m_digitsR.push_back(value);
                 value *= m_baseR;
             }
+        }
+
+        // check if the number of digits to throw is valid
+        if ((m_digitsG - m_numDigitsToThrow) < 1) {
+            OPENFHE_THROW(config_error, "Number of digits to throw should be at least left 1 digit in G.");
         }
 
         // Computes baseG^i
@@ -177,6 +182,10 @@ public:
 
     uint32_t GetDigitsG() const {
         return m_digitsG;
+    }
+
+    uint32_t GetNumDigitsToThrow() const {
+        return m_numDigitsToThrow;
     }
 
     uint32_t GetBaseR() const {
@@ -287,6 +296,9 @@ private:
 
     // number of digits in decomposing integers mod Q
     uint32_t m_digitsG = 0;
+
+    // number of digits to throw in decomposing integers mod Q
+    uint32_t m_numDigitsToThrow = 0;
 
     // base used for the refreshing key (used only for DM bootstrapping)
     uint32_t m_baseR = 0;

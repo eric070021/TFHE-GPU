@@ -90,7 +90,7 @@ public:
    * @return creates the cryptocontext
    */
     void GenerateBinFHEContext(BINFHE_PARAMSET set, bool arbFunc, uint32_t logQ = 11, int64_t N = 0,
-                               BINFHE_METHOD method = GINX, bool timeOptimization = false , uint32_t baseG = 0);
+                               BINFHE_METHOD method = GINX, bool timeOptimization = false , uint32_t baseG = 0, uint32_t numDigitsToThrow = 0);
 
     /**
    * Creates a crypto context using predefined parameters sets. Recommended for
