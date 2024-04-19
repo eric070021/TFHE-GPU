@@ -113,10 +113,10 @@ __global__ void bootstrappingMultiBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA,
     const uint32_t NHalf            = N >> 1;
     const uint64_t Q                = params_CUDA[3];
     const uint64_t QHalf            = Q >> 1;
-    const uint32_t baseG            = static_cast<uint32_t>(params_CUDA[4]);
+    const uint32_t logbaseG         = static_cast<uint32_t>(params_CUDA[4]);
     const uint32_t digitsG2         = static_cast<uint32_t>(params_CUDA[5]);
     const uint32_t RGSW_size        = digitsG2 * 2 * NHalf;
-    const int32_t gBits             = static_cast<int32_t>(log2(static_cast<double>(baseG)));
+    const int32_t gBits             = logbaseG;
     const int32_t gBitsMaxBits      = 64 - gBits;
     const uint32_t numDigitsToThrow = static_cast<uint32_t>(params_CUDA[6]);
     const bool modInt64             = Q > 4294967296 ? false : true; // Q > 2^32 or not
@@ -392,10 +392,10 @@ __global__ void bootstrappingSingleBlock(Complex_d* acc_CUDA, Complex_d* ct_CUDA
     const uint32_t NHalf            = N >> 1;
     const uint64_t Q                = params_CUDA[3];
     const uint64_t QHalf            = Q >> 1;
-    const uint32_t baseG            = static_cast<uint32_t>(params_CUDA[4]);
+    const uint32_t logbaseG         = static_cast<uint32_t>(params_CUDA[4]);
     const uint32_t digitsG2         = static_cast<uint32_t>(params_CUDA[5]);
     const uint32_t RGSW_size        = digitsG2 * 2 * NHalf;
-    const int32_t gBits             = static_cast<int32_t>(log2(static_cast<double>(baseG)));
+    const int32_t gBits             = logbaseG;
     const int32_t gBitsMaxBits      = 64 - gBits;
     const uint32_t numDigitsToThrow = static_cast<uint32_t>(params_CUDA[6]);
     const bool modInt64             = Q > 4294967296 ? false : true; // Q > 2^32 or not
@@ -863,6 +863,7 @@ void GPUFFTBootstrap::GPUSetup_core(const std::shared_ptr<BinFHECryptoParams> pa
     uint32_t numDigitsToThrow   = RGSWParams->GetNumDigitsToThrow();
     uint32_t digitsG2           = (RGSWParams->GetDigitsG() - numDigitsToThrow) << 1;
     uint32_t baseG              = RGSWParams->GetBaseG();
+    uint32_t logbaseG           = static_cast<uint32_t>(std::log2(baseG));
     uint32_t RGSW_size          = digitsG2 * 2 * NHalf;
     NativeInteger qKS           = LWEParams->GetqKS();
     int64_t qKS_int             = qKS.ConvertToInt();
@@ -895,7 +896,7 @@ void GPUFFTBootstrap::GPUSetup_core(const std::shared_ptr<BinFHECryptoParams> pa
     parameters[1] = N;
     parameters[2] = q_int;
     parameters[3] = Q_int;
-    parameters[4] = baseG;
+    parameters[4] = logbaseG;
     parameters[5] = digitsG2;
     parameters[6] = numDigitsToThrow;
     parameters[7] = qKS_int;
