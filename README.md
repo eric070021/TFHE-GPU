@@ -18,6 +18,7 @@ A high-performance library that leverages GPU acceleration to boost the TFHE (Fu
   - [EvalFloor](#evalfloor)
   - [EvalSign](#evalsign)
   - [EvalDecomp](#evaldecomp)
+  - [CiphertextMulMatrix](#ciphertextmulmatrix)
 - [Sample Program](#sample-program)
 
 ## Introduction
@@ -130,6 +131,17 @@ std::vector<LWECiphertext> EvalSign(const std::vector<LWECiphertext>& ct) const;
   - Vector of Vector of LWECiphertext
 ```cpp
 std::vector<std::vector<LWECiphertext>> EvalDecomp(const std::vector<LWECiphertext>& ct) const;
+```
+
+### CiphertextMulMatrix
+This function performs matrix multiplication with a vector of LWECiphertext objects and a matrix represented by a vector of vectors of int64_t elements. The elements in  output ciphertexts are all mod by Qks (modulus of keyswich).
+- **Input**:
+  - Vector of LWECiphertext
+  - Matrix to be multiplied
+- **Output**:
+  - Vector of LWECiphertext
+```cpp
+std::vector<LWECiphertext> CiphertextMulMatrix(const std::vector<LWECiphertext>& ct, const std::vector<std::vector<int64_t>>& matrix) const;
 ```
 
 ## Sample Program
