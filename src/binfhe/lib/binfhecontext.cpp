@@ -316,6 +316,10 @@ std::vector<NativeInteger> BinFHEContext::GenerateLUTviaFunction(NativeInteger (
 *  GPU Functions
 ***************************************************************************************************************************************/
 
+std::vector<LWECiphertext> BinFHEContext::CiphertextMulMatrix(const std::vector<LWECiphertext>& ct, const std::vector<std::vector<int64_t>>& matrix) const{
+    return (*GPULWEOperation::CiphertextMulMatrix_CUDA(m_params, ct, matrix));
+}
+
 std::vector<LWECiphertext> BinFHEContext::EvalBinGate(BINGATE gate, const std::vector<LWECiphertext>& ct1, const std::vector<LWECiphertext>& ct2) const{
     return (*m_binfhescheme->EvalBinGate(m_params, gate, m_BTKey, ct1, ct2));
 }
@@ -351,10 +355,12 @@ void BinFHEContext::GPUSetup(int numGPUs) const{
         std::string errMsg("ERROR: Need to call BTKeyGen before calling GPUSetup");
         OPENFHE_THROW(openfhe_error, errMsg);
     }
+    GPULWEOperation::GPUSetup(numGPUs);
     GPUFFTBootstrap::GPUSetup(m_params, m_BTKey.BSkey, m_BTKey.KSkey, numGPUs); 
 }
 
 void BinFHEContext::GPUClean() const{
+    GPULWEOperation::GPUClean();
     GPUFFTBootstrap::GPUClean();
 }
 

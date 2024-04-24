@@ -41,6 +41,8 @@
 #include "utils/serializable.h"
 #include "lattice/stdlatticeparms.h"
 
+#include "lwe-operation.cuh"
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -348,6 +350,15 @@ public:
     /**************************************************************************************************************************************
     *  GPU Functions
     ***************************************************************************************************************************************/
+
+    /**
+   * Evaluate vector of ciphertexts multiply a matrix
+   *
+   * @param &ct1 vector of ciphertexts to be bootstrapped
+   * @param matrix the to be multiplied matrix
+   * @return a shared pointer to the resulting ciphertext
+   */
+    std::vector<LWECiphertext> CiphertextMulMatrix(const std::vector<LWECiphertext>& ct, const std::vector<std::vector<int64_t>>& matrix) const;
 
     /**
    * Evaluates a binary gate (calls bootstrapping as a subroutine)
