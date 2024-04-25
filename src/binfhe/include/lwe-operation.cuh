@@ -3,7 +3,7 @@
 
 #ifdef __CUDACC__
 #include <cuda_runtime.h>
-#include <cublasXt.h>
+#include <cublas_v2.h>
 #endif
 #include <iostream>
 #include <vector>
@@ -37,7 +37,7 @@ public:
 private:
     // CUBLAS handle
     #ifdef __CUDACC__
-    static cublasXtHandle_t handle;
+    static cublasHandle_t handle;
     #endif
 };
 

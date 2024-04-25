@@ -12,7 +12,15 @@ do { \
 
 namespace lbcrypto {
     // Definition of the static member variables
-    cublasXtHandle_t GPULWEOperation::handle;
+    cublasHandle_t GPULWEOperation::handle;
+
+    __global__ void applyFmod(double* matrix, int size, double divisor) {
+        int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+        if (index < size) {
+            matrix[index] = fmod(matrix[index], divisor);
+        }
+    }
 
     std::shared_ptr<std::vector<LWECiphertext>> GPULWEOperation::CiphertextMulMatrix_CUDA(const std::shared_ptr<BinFHECryptoParams> params, 
             const std::vector<LWECiphertext>& ct, const std::vector<std::vector<int64_t>>& matrix){
@@ -55,10 +63,32 @@ namespace lbcrypto {
             for (int j = 0; j < N; ++j)
                 h_B[N*i + j] = static_cast<double>(matrix[i][j]);
 
+        /* Set the device to use */
+        cudaSetDevice(0);
+        
+        /* Allocate memory on the GPU */
+        double *d_A, *d_B, *d_C;
+        cudaMalloc(&d_A, M * K * sizeof(double));
+        cudaMalloc(&d_B, K * N * sizeof(double));
+        cudaMalloc(&d_C, M * N * sizeof(double));
+
+        /* Copy input matrices from host to GPU */
+        cudaMemcpy(d_A, h_A, M * K * sizeof(double), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_B, h_B, K * N * sizeof(double), cudaMemcpyHostToDevice);
+
         /* Perform matrix multiplication on device */
         const double alpha = 1.0f, beta = 0.0f;
         cublasOperation_t transa = CUBLAS_OP_N, transb = CUBLAS_OP_T;
-        CUBLAS_ERROR_CHECK(cublasXtDgemm(handle, transa, transb, M, N, K, &alpha, h_A, M, h_B, N, &beta, h_C, M));
+        CUBLAS_ERROR_CHECK(cublasDgemm(handle, transa, transb, M, N, K, &alpha, d_A, M, d_B, N, &beta, d_C, M));
+
+        /* Launch the kernel */
+        int blockSize = 256; // Choose an appropriate block size
+        int gridSize = (M * N + blockSize - 1) / blockSize;
+        applyFmod<<<gridSize, blockSize>>>(d_C, M * N, static_cast<double>(qKS));
+        cudaDeviceSynchronize();
+
+        /* Copy result matrix from GPU to host */
+        cudaMemcpy(h_C, d_C, M * N * sizeof(double), cudaMemcpyDeviceToHost);
 
         /* Serialize result matrix to ciphertexts */
         auto ct_res = std::make_shared<std::vector<LWECiphertext>> (N);
@@ -66,9 +96,9 @@ namespace lbcrypto {
             // A
             NativeVector a(n, qKS);
             for(int j = 0; j < (M-1); j++)
-                a[j] = static_cast<uint64_t>(fmod(h_C[M*i + j], qKS));
+                a[j] = static_cast<uint64_t>(h_C[M*i + j]);
             // B
-            NativeInteger b (static_cast<uint64_t>(fmod(h_C[M*i + (M-1)], qKS)));
+            NativeInteger b (static_cast<uint64_t>(h_C[M*i + (M-1)]));
 
             (*ct_res)[i] = std::make_shared<LWECiphertextImpl>(LWECiphertextImpl(std::move(a), b));
         }
@@ -77,41 +107,23 @@ namespace lbcrypto {
         free(h_A);
         free(h_B);
         free(h_C);
+
+        /* Free memory on GPU */
+        cudaFree(d_A);
+        cudaFree(d_B);
+        cudaFree(d_C);
         
         return ct_res;
     }
 
     void GPULWEOperation::GPUSetup(int numGPUs){
-        /* Setting up available GPU INFO */
-        int deviceCount;
-        cudaGetDeviceCount(&deviceCount);
-
-        if (deviceCount == 0) {
-            std::cerr << "No CUDA devices found." << std::endl;
-            return;
-        }
-
-        /* Determine the number of GPUs to use*/
-        int GPUcount;
-        if(numGPUs > 0 && numGPUs <= deviceCount) GPUcount = numGPUs;
-        else GPUcount = deviceCount;
-
-        /* Set the device IDs to use */
-        int* devices = (int *)malloc(GPUcount * sizeof(int));
-        for(int i = 0; i < GPUcount; i++){
-            devices[i] = i;
-        }
-
-        /* Initialize cuBLAS Xt */
-        CUBLAS_ERROR_CHECK(cublasXtCreate(&handle));
-        CUBLAS_ERROR_CHECK(cublasXtDeviceSelect(handle, GPUcount, devices));
-
-        /* Free devices array */
-        free(devices);
+        cudaSetDevice(0);
+        cublasCreate(&handle);
     }
 
     void GPULWEOperation::GPUClean(){
-        CUBLAS_ERROR_CHECK(cublasXtDestroy(handle));
+        cudaSetDevice(0);
+        cublasDestroy(handle);
     }
 
 }; // namespace lbcrypto

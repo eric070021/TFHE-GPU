@@ -42,8 +42,8 @@ void GEMMTest(){
     auto LWEParams    = cc.GetParams()->GetLWEParams();
     uint64_t qKS = static_cast<uint64_t>(LWEParams->GetqKS().ConvertToInt());
     int n = LWEParams->Getn();
-    int in_ct = 8192;
-    int out_ct = 512;
+    int in_ct = 1024;
+    int out_ct = 1024;
 
     std::vector<LWECiphertext> ct_vec;
     for (int i = 0; i < in_ct; i++) {
