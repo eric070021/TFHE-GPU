@@ -13,6 +13,7 @@ A high-performance library that leverages GPU acceleration to boost the TFHE (Fu
 - [Supported APIs](#supported-apis)
   - [GPU Setup](#gpu-setup)
   - [GPU Clean](#gpu-clean)
+  - [GenerateBinFHEContext](#generatebinfhecontext)
   - [EvalBinGate](#evalbingate)
   - [EvalFunc](#evalfunc)
   - [EvalFloor](#evalfloor)
@@ -65,7 +66,7 @@ To build the project, follow these steps:
 ### GPU Setup
 Make sure to call this api after generating bootstrapping key.
 - **Input**:
-  - Number of GPUs to use (default using all available GPUs)
+  - numGPUs: Number of GPUs to use (default using all available GPUs)
 ```cpp
 cc.GPUSetup(int numGPUs);
 ```
@@ -76,11 +77,26 @@ Call this api at the end of the program.
 cc.GPUClean();
 ```
 
+### GenerateBinFHEContext
+Extension of the original GenerateBinFHEContext
+- **Input**:
+  - set: the parameter set: TOY, MEDIUM, STD128, STD192, STD256
+  - arbFunc: whether need to evaluate an arbitrary function using functional bootstrapping
+  - logQ: log(input ciphertext modulus)
+  - N: ring dimension for RingGSW/RLWE used in bootstrapping
+  - method: the bootstrapping method (DM or CGGI)
+  - timeOptimization: whether to use dynamic bootstrapping technique
+  - baseG: base for RingGSW used in bootstrapping
+  - numDigitsToThrow: number of digits to throw in the bootstrapping
+```cpp
+void GenerateBinFHEContext(BINFHE_PARAMSET set, bool arbFunc, uint32_t logQ = 11, int64_t N = 0, BINFHE_METHOD method = GINX, bool timeOptimization = false , uint32_t baseG = 0, uint32_t numDigitsToThrow = 0);
+```
+
 ### EvalBinGate
 - **Input**:
-  - Gate you want to evaluate
-  - Vector of LWECiphertext 1
-  - Vector of LWECiphertext 2
+  - gate: Gate you want to evaluate
+  - ct1: Vector of LWECiphertext 1
+  - ct2: Vector of LWECiphertext 2
 - **Output**:
   - Vector of LWECiphertext
 ```cpp
@@ -89,26 +105,26 @@ std::vector<LWECiphertext> EvalBinGate(BINGATE gate, const std::vector<LWECipher
 
 ### EvalFunc
 - **Input**:
-  - Vector of LWECiphertext
-  - LookUpTable
+  - ct: Vector of LWECiphertext
+  - LUT: LookUpTable
 - **Output**:
   - Vector of LWECiphertext
 ```cpp
 std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<NativeInteger>& LUT) const;
 ```
 - **Input**:
-  - Vector of LWECiphertext
-  - Vector of LookUpTables
+  - ct: Vector of LWECiphertext
+  - LUT: Vector of LookUpTables
 - **Output**:
   - Vector of LWECiphertext
 ```cpp
-std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<std::vector<NativeInteger>& LUT>) const;
+std::vector<LWECiphertext> EvalFunc(const std::vector<LWECiphertext>& ct, const std::vector<std::vector<NativeInteger>>& LUT) const;
 ```
 
 ### EvalFloor
 - **Input**:
-  - Vector of LWECiphertext
-  - Round bits
+  - ct: Vector of LWECiphertext
+  - roundbits: Round bits
 - **Output**:
   - Vector of LWECiphertext
 ```cpp
@@ -117,7 +133,7 @@ std::vector<LWECiphertext> EvalFloor(const std::vector<LWECiphertext>& ct, uint3
 
 ### EvalSign
 - **Input**:
-  - Vector of LWECiphertext
+  - ct: Vector of LWECiphertext
 - **Output**:
   - Vector of LWECiphertext
 ```cpp
@@ -126,7 +142,7 @@ std::vector<LWECiphertext> EvalSign(const std::vector<LWECiphertext>& ct) const;
 
 ### EvalDecomp
 - **Input**:
-  - Vector of LWECiphertext
+  - ct: Vector of LWECiphertext
 - **Output**:
   - Vector of Vector of LWECiphertext
 ```cpp
@@ -136,9 +152,9 @@ std::vector<std::vector<LWECiphertext>> EvalDecomp(const std::vector<LWECipherte
 ### CiphertextMulMatrix
 This function performs matrix multiplication with a vector of LWECiphertext objects and a matrix represented by a vector of vectors of int64_t elements. The elements in  output ciphertexts are all mod by Qks (modulus of keyswich).
 - **Input**:
-  - Vector of LWECiphertext
-  - Matrix to be multiplied
-  - Modulus of output LWECiphertext
+  - ct: Vector of LWECiphertext
+  - matrix: Matrix to be multiplied
+  - modulus: Modulus of output LWECiphertext
 - **Output**:
   - Vector of LWECiphertext
 ```cpp
@@ -155,7 +171,8 @@ using namespace lbcrypto;
 int main() {
     // Sample Program: Step 1: Set CryptoContext
     auto cc = BinFHEContext();
-    cc.GenerateBinFHEContext(STD128, true, 12);
+    // use default baseG, throw 1 digit
+    cc.GenerateBinFHEContext(STD128, true, 12, 0, GINX, false, 0, 1);
 
     // Sample Program: Step 2: Key Generation
 

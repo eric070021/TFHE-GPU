@@ -89,6 +89,8 @@ public:
    * @param N ring dimension for RingGSW/RLWE used in bootstrapping
    * @param method the bootstrapping method (DM or CGGI)
    * @param timeOptimization whether to use dynamic bootstrapping technique
+   * @param baseG base for RingGSW/RLWE used in bootstrapping
+   * @param numDigitsToThrow number of digits to throw in the bootstrapping
    * @return creates the cryptocontext
    */
     void GenerateBinFHEContext(BINFHE_PARAMSET set, bool arbFunc, uint32_t logQ = 11, int64_t N = 0,
