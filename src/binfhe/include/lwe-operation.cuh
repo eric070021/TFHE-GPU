@@ -21,7 +21,8 @@ public:
      * @param ct vector of input ciphertexts
      * @param matrix matrix to multiply with
      */
-    static std::shared_ptr<std::vector<LWECiphertext>> CiphertextMulMatrix_CUDA(const std::shared_ptr<BinFHECryptoParams> params, const std::vector<LWECiphertext>& ct, const std::vector<std::vector<int64_t>>& matrix);
+    static std::shared_ptr<std::vector<LWECiphertext>> CiphertextMulMatrix_CUDA(const std::shared_ptr<BinFHECryptoParams> params,
+         const std::vector<LWECiphertext>& ct, const std::vector<std::vector<int64_t>>& matrix, uint64_t modulus);
 
     /**
      * GPU setup wrapper

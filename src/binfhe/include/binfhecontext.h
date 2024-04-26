@@ -356,9 +356,10 @@ public:
    *
    * @param &ct1 vector of ciphertexts to be bootstrapped
    * @param matrix the to be multiplied matrix
+   * @param modulus the modulus of output ciphertext
    * @return a shared pointer to the resulting ciphertext
    */
-    std::vector<LWECiphertext> CiphertextMulMatrix(const std::vector<LWECiphertext>& ct, const std::vector<std::vector<int64_t>>& matrix) const;
+    std::vector<LWECiphertext> CiphertextMulMatrix(const std::vector<LWECiphertext>& ct, const std::vector<std::vector<int64_t>>& matrix, uint64_t modulus) const;
 
     /**
    * Evaluates a binary gate (calls bootstrapping as a subroutine)

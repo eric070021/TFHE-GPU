@@ -63,7 +63,7 @@ void GEMMTest(){
             matrix[i][j] = rand() % (1<<6);
 
     auto start_GPU = std::chrono::high_resolution_clock::now();
-    auto ct_GPU_res = cc.CiphertextMulMatrix(ct_vec, matrix);
+    auto ct_GPU_res = cc.CiphertextMulMatrix(ct_vec, matrix, qKS);
     auto end_GPU = std::chrono::high_resolution_clock::now();
     auto elapsed_GPU = std::chrono::duration_cast<std::chrono::milliseconds>(end_GPU-start_GPU);
     std::cout << "GPU CiphertextMulMatrix Time: " << (double)elapsed_GPU.count() << " ms" << std::endl;

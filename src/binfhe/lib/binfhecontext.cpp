@@ -316,8 +316,8 @@ std::vector<NativeInteger> BinFHEContext::GenerateLUTviaFunction(NativeInteger (
 *  GPU Functions
 ***************************************************************************************************************************************/
 
-std::vector<LWECiphertext> BinFHEContext::CiphertextMulMatrix(const std::vector<LWECiphertext>& ct, const std::vector<std::vector<int64_t>>& matrix) const{
-    return (*GPULWEOperation::CiphertextMulMatrix_CUDA(m_params, ct, matrix));
+std::vector<LWECiphertext> BinFHEContext::CiphertextMulMatrix(const std::vector<LWECiphertext>& ct, const std::vector<std::vector<int64_t>>& matrix, uint64_t modulus) const{
+    return (*GPULWEOperation::CiphertextMulMatrix_CUDA(m_params, ct, matrix, modulus));
 }
 
 std::vector<LWECiphertext> BinFHEContext::EvalBinGate(BINGATE gate, const std::vector<LWECiphertext>& ct1, const std::vector<LWECiphertext>& ct2) const{

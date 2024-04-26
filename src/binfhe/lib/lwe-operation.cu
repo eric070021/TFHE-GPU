@@ -14,16 +14,16 @@ namespace lbcrypto {
     // Definition of the static member variables
     cublasHandle_t GPULWEOperation::handle;
 
-    __global__ void applyFmod(double* matrix, int size, double divisor) {
+    __global__ void applyFmod(double* matrix, int size, double modulus) {
         int index = blockIdx.x * blockDim.x + threadIdx.x;
 
         if (index < size) {
-            matrix[index] = fmod(matrix[index], divisor);
+            matrix[index] = fmod(matrix[index], modulus);
         }
     }
 
     std::shared_ptr<std::vector<LWECiphertext>> GPULWEOperation::CiphertextMulMatrix_CUDA(const std::shared_ptr<BinFHECryptoParams> params, 
-            const std::vector<LWECiphertext>& ct, const std::vector<std::vector<int64_t>>& matrix){
+            const std::vector<LWECiphertext>& ct, const std::vector<std::vector<int64_t>>& matrix, uint64_t modulus){
         
         /* Error check */
         if (ct.empty()) {
@@ -43,7 +43,6 @@ namespace lbcrypto {
         uint32_t M                  = params->GetLWEParams()->Getn() + 1;
         uint32_t N                  = matrix[0].size();
         uint32_t K                  = ct.size();
-        uint64_t qKS                = params->GetLWEParams()->GetqKS().ConvertToInt();
         uint32_t n                  = params->GetLWEParams()->Getn();
         
         /* Allocate matrices on host */
@@ -84,7 +83,7 @@ namespace lbcrypto {
         /* Launch the kernel */
         int blockSize = 256; // Choose an appropriate block size
         int gridSize = (M * N + blockSize - 1) / blockSize;
-        applyFmod<<<gridSize, blockSize>>>(d_C, M * N, static_cast<double>(qKS));
+        applyFmod<<<gridSize, blockSize>>>(d_C, M * N, static_cast<double>(modulus));
         cudaDeviceSynchronize();
 
         /* Copy result matrix from GPU to host */
@@ -94,7 +93,7 @@ namespace lbcrypto {
         auto ct_res = std::make_shared<std::vector<LWECiphertext>> (N);
         for (int i = 0; i < N; ++i) {
             // A
-            NativeVector a(n, qKS);
+            NativeVector a(n, modulus);
             for(int j = 0; j < (M-1); j++)
                 a[j] = static_cast<uint64_t>(h_C[M*i + j]);
             // B
