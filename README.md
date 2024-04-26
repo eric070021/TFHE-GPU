@@ -138,10 +138,11 @@ This function performs matrix multiplication with a vector of LWECiphertext obje
 - **Input**:
   - Vector of LWECiphertext
   - Matrix to be multiplied
+  - Modulus of output LWECiphertext
 - **Output**:
   - Vector of LWECiphertext
 ```cpp
-std::vector<LWECiphertext> CiphertextMulMatrix(const std::vector<LWECiphertext>& ct, const std::vector<std::vector<int64_t>>& matrix) const;
+std::vector<LWECiphertext> CiphertextMulMatrix(const std::vector<LWECiphertext>& ct, const std::vector<std::vector<int64_t>>& matrix, uint64_t modulus) const;
 ```
 
 ## Sample Program
