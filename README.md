@@ -2,7 +2,11 @@
 
 ![CMake Version](https://img.shields.io/badge/CMake-%3E%3D3.18-brightgreen.svg)
 
-A high-performance library that leverages GPU acceleration to boost the TFHE (Fully Homomorphic Encryption) bootstrapping process in the OpenFHE library.
+High-Performance Library with GPU Acceleration for TFHE Bootstrapping
+
+This library is designed to enhance the TFHE (Fully Homomorphic Encryption) bootstrapping process by leveraging GPU acceleration within the [OpenFHE](https://github.com/openfheorg/openfhe-development) library, version 1.0.4.
+
+The supported functions in this repository are identical to those in the [OpenFHE](https://github.com/openfheorg/openfhe-development) library. However, the batch version allows you to push ciphertexts into a C++ vector and process multiple bootstrappings on GPUs simultaneously. For detailed API descriptions, refer to the [Supported APIs](#supported-apis) section.
 
 ## Licensing
 
@@ -12,10 +16,10 @@ The GPU backend and any additional contributions by Inventec Corporation are lic
 
 ## Table of Contents
 
-- [Introduction](#introduction)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Building](#building)
+- [Directory Structure](#directory-structure)
 - [Supported APIs](#supported-apis)
   - [GPU Setup](#gpu-setup)
   - [GPU Clean](#gpu-clean)
@@ -27,10 +31,7 @@ The GPU backend and any additional contributions by Inventec Corporation are lic
   - [EvalDecomp](#evaldecomp)
   - [CiphertextMulMatrix](#ciphertextmulmatrix)
 - [Sample Program](#sample-program)
-
-## Introduction
-
-**openFHE-GPU** is a powerful library designed to enhance the TFHE bootstrapping by leveraging the computational capabilities of modern GPUs. It provides an efficient and performant way to accelerate secure computations, enabling faster execution of homomorphically encrypted operations.
+- [Copyright Information](#copyright-information)
 
 ## Getting Started
 
@@ -67,6 +68,25 @@ To build the project, follow these steps:
    ./build_release/bin/examples/binfhe/unittest
    ./build_release/bin/examples/binfhe/time-estimate
 ```
+
+## Directory Structure
+
+We list the added GPU source code files below. Please note that we have also modified other files for API integration, but these changes are primarily for concatenation purposes.
+
+```plaintext
+OpenFHE-GPU/
+│
+└── src/binfhe
+    ├── include/
+    │   ├── bootstrapping.cuh   # Header file for bootstrapping.cu
+    │   ├── lwe-operation.cuh   # Header file for lwe-operation.cu
+    │   └── utils_gpu.cuh       # Utility functions for GPU coding
+    │
+    └── lib/
+        ├── bootstrapping.cu    # Kernel functions for bootstrapping.
+        └── lwe-operation.cu    # Kernel function for CiphertextMulMatrix API
+```
+
 ## Supported APIs
 
 ### GPU Setup
@@ -236,3 +256,6 @@ int main() {
     return 0;
 }
 ```
+
+## Copyright Information
+This project is under the terms of [the MIT license](./LICENSE-MIT). It is only for research or education purposes, and not freely available for commercial use or redistribution. This intellectual property belongs to the Inventec Corporation. Licensing is possible if you want to use the code for commercial use. For scientific use, please reference this repository together with the relevant publication.
