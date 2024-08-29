@@ -2,7 +2,13 @@
 
 ![CMake Version](https://img.shields.io/badge/CMake-%3E%3D3.18-brightgreen.svg)
 
-A high-performance library that leverages GPU acceleration to boost the TFHE (Fully Homomorphic Encryption) bootstrapping process.
+A high-performance library that leverages GPU acceleration to boost the TFHE (Fully Homomorphic Encryption) bootstrapping process in the OpenFHE library.
+
+## Licensing
+
+This project is based on the OpenFHE library, which is licensed under the BSD 2-Clause License. The original BSD 2-Clause License can be found [here](./LICENSE-BSD).
+
+The GPU backend and any additional contributions by Inventec Corporation are licensed under the MIT License. The MIT License can be found [here](./LICENSE-MIT).
 
 ## Table of Contents
 
