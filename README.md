@@ -1,4 +1,4 @@
-# openFHE-GPU
+# TFHE-GPU
 
 ![CMake Version](https://img.shields.io/badge/CMake-%3E%3D3.18-brightgreen.svg)
 
@@ -37,7 +37,7 @@ The GPU backend and any additional contributions by Inventec Corporation are lic
 
 ### Prerequisites
 
-To successfully build and use **openFHE-GPU**, you need the following prerequisites:
+To successfully build and use **TFHE-GPU**, you need the following prerequisites:
 
 - CMake version 3.18 or higher
 - Supported host compiler (C++17 required)
@@ -52,8 +52,8 @@ To build the project, follow these steps:
 1. Clone the repository to your local machine:
 
 ```bash
-   git clone https://github.com/eric070021/openFHE-GPU.git
-   cd openFHE-GPU
+   git clone https://github.com/eric070021/TFHE-GPU.git
+   cd TFHE-GPU
 ```
 2. Create a release build:
 ```bash
@@ -74,9 +74,9 @@ To build the project, follow these steps:
 We list the added GPU source code files below. Please note that we have also modified other files for API integration, but these changes are primarily for concatenation purposes.
 
 ```plaintext
-OpenFHE-GPU/
+TFHE-GPU/
 │
-└── src/binfhe
+└── src/binfhe/
     ├── include/
     │   ├── bootstrapping.cuh   # Header file for bootstrapping.cu
     │   ├── lwe-operation.cuh   # Header file for lwe-operation.cu
